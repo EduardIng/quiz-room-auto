@@ -587,3 +587,57 @@
 .lang-toggle-creator:hover {
   background: rgba(255,255,255,0.08);
 }
+
+/* ── Drag-to-reorder ── */
+.question-list-item {
+  cursor: grab;
+}
+
+.question-list-item:active {
+  cursor: grabbing;
+}
+
+.question-list-item.drag-over {
+  border-color: var(--color-primary-light, #a78bfa) !important;
+  background: rgba(167,139,250,0.1) !important;
+  transform: scale(1.01);
+}
+
+.q-drag-handle {
+  font-size: 1rem;
+  color: var(--color-text-muted, #666);
+  cursor: grab;
+  padding-right: 2px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.q-badge {
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* ── Media URL inputs ── */
+.media-url-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.media-preview-thumb {
+  display: none;
+  max-height: 100px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid rgba(255,255,255,0.1);
+  align-self: flex-start;
+}
+
+.media-audio-preview {
+  width: 100%;
+  height: 36px;
+  border-radius: 20px;
+  accent-color: var(--color-primary, #7c3aed);
+}

@@ -23,7 +23,9 @@ const EMPTY_QUESTION = () => ({
   question: '',
   answers: ['', '', '', ''],
   correctAnswer: 0,
-  timeLimit: ''  // порожнє = використовувати глобальний config.questionTime
+  timeLimit: '',  // порожнє = використовувати глобальний config.questionTime
+  image: '',
+  audio: ''
 });
 
 export default function QuizCreator() {
@@ -46,6 +48,10 @@ export default function QuizCreator() {
 
   // Socket.IO ref (підключаємо лише при потребі)
   const socketRef = useRef(null);
+
+  // Drag-to-reorder refs and state
+  const dragIndexRef = useRef(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   // Import / library refs and state
   const fileInputRef = useRef(null);
@@ -130,6 +136,18 @@ export default function QuizCreator() {
     ));
   }, []);
 
+  const updateImage = useCallback((qIndex, value) => {
+    setQuestions(prev => prev.map((q, i) =>
+      i === qIndex ? { ...q, image: value } : q
+    ));
+  }, []);
+
+  const updateAudio = useCallback((qIndex, value) => {
+    setQuestions(prev => prev.map((q, i) =>
+      i === qIndex ? { ...q, audio: value } : q
+    ));
+  }, []);
+
   // ─────────────────────────────────────────────
   // ВАЛІДАЦІЯ
   // ─────────────────────────────────────────────
@@ -187,11 +205,10 @@ export default function QuizCreator() {
           answers: q.answers.map(a => a.trim()),
           correctAnswer: q.correctAnswer
         };
-        // Додаємо timeLimit тільки якщо він заданий
         const tl = parseInt(q.timeLimit, 10);
-        if (!isNaN(tl) && tl >= 10 && tl <= 120) {
-          result.timeLimit = tl;
-        }
+        if (!isNaN(tl) && tl >= 10 && tl <= 120) result.timeLimit = tl;
+        if (q.image?.trim()) result.image = q.image.trim();
+        if (q.audio?.trim()) result.audio = q.audio.trim();
         return result;
       })
     };
@@ -259,7 +276,9 @@ export default function QuizCreator() {
         question: q.question.trim(),
         answers: q.answers.map(a => a.trim()),
         correctAnswer: q.correctAnswer,
-        ...(q.timeLimit ? { timeLimit: parseInt(q.timeLimit, 10) } : {})
+        ...(q.timeLimit ? { timeLimit: parseInt(q.timeLimit, 10) } : {}),
+        ...(q.image?.trim() ? { image: q.image.trim() } : {}),
+        ...(q.audio?.trim() ? { audio: q.audio.trim() } : {})
       }))
     };
 
@@ -272,6 +291,43 @@ export default function QuizCreator() {
     a.click();
     URL.revokeObjectURL(url);
   }, [title, questions]);
+
+  // ─────────────────────────────────────────────
+  // DRAG-TO-REORDER
+  // ─────────────────────────────────────────────
+
+  const handleDragStart = useCallback((index) => {
+    dragIndexRef.current = index;
+  }, []);
+
+  const handleDragOver = useCallback((e, index) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDrop = useCallback((e, toIndex) => {
+    e.preventDefault();
+    const fromIndex = dragIndexRef.current;
+    if (fromIndex === null || fromIndex === toIndex) {
+      dragIndexRef.current = null;
+      setDragOverIndex(null);
+      return;
+    }
+    setQuestions(prev => {
+      const updated = [...prev];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+      return updated;
+    });
+    setActiveQuestion(toIndex);
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  }, []);
 
   // ─────────────────────────────────────────────
   // IMPORT / LIBRARY
@@ -298,7 +354,9 @@ export default function QuizCreator() {
           question: q.question || '',
           answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
           correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
-          timeLimit: q.timeLimit ? String(q.timeLimit) : ''
+          timeLimit: q.timeLimit ? String(q.timeLimit) : '',
+          image: q.image || '',
+          audio: q.audio || ''
         })));
         setActiveQuestion(0);
       } catch {
@@ -334,7 +392,9 @@ export default function QuizCreator() {
       question: q.question || '',
       answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
       correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
-      timeLimit: q.timeLimit ? String(q.timeLimit) : ''
+      timeLimit: q.timeLimit ? String(q.timeLimit) : '',
+      image: q.image || '',
+      audio: q.audio || ''
     })));
     setActiveQuestion(0);
     setShowLibrary(false);
@@ -432,15 +492,23 @@ export default function QuizCreator() {
             <label className="field-label">{t('questionsList')} ({questions.length})</label>
             <div className="questions-list">
               {questions.map((q, i) => (
-                <button
+                <div
                   key={i}
-                  className={`question-list-item ${i === activeQuestion ? 'active' : ''} ${q.question.trim() ? 'filled' : ''}`}
+                  className={`question-list-item ${i === activeQuestion ? 'active' : ''} ${q.question.trim() ? 'filled' : ''} ${dragOverIndex === i ? 'drag-over' : ''}`}
                   onClick={() => setActiveQuestion(i)}
+                  draggable
+                  onDragStart={() => handleDragStart(i)}
+                  onDragOver={e => handleDragOver(e, i)}
+                  onDrop={e => handleDrop(e, i)}
+                  onDragEnd={handleDragEnd}
                 >
+                  <span className="q-drag-handle" title="Drag to reorder">⠿</span>
                   <span className="q-number">#{i + 1}</span>
                   <span className="q-preview">
                     {q.question.trim() || t('noText')}
                   </span>
+                  {q.image && <span className="q-badge">🖼</span>}
+                  {q.audio && <span className="q-badge">🎵</span>}
                   {questions.length > 1 && (
                     <button
                       className="q-remove"
@@ -448,7 +516,7 @@ export default function QuizCreator() {
                       title="Видалити питання"
                     >×</button>
                   )}
-                </button>
+                </div>
               ))}
             </div>
             <button className="add-question-btn" onClick={addQuestion}>
@@ -566,6 +634,50 @@ export default function QuizCreator() {
                 min={10}
                 max={120}
               />
+            </div>
+
+            {/* URL зображення (необов'язково) */}
+            <div className="field-group">
+              <label className="field-label">{t('imageUrl')}</label>
+              <div className="media-url-row">
+                <input
+                  className="creator-input"
+                  type="url"
+                  placeholder="https://example.com/image.jpg"
+                  value={currentQ.image}
+                  onChange={e => updateImage(activeQuestion, e.target.value)}
+                />
+                {currentQ.image && (
+                  <img
+                    src={currentQ.image}
+                    alt="preview"
+                    className="media-preview-thumb"
+                    onError={e => { e.target.style.display = 'none'; }}
+                    onLoad={e => { e.target.style.display = 'block'; }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* URL аудіо (необов'язково) */}
+            <div className="field-group">
+              <label className="field-label">{t('audioUrl')}</label>
+              <div className="media-url-row">
+                <input
+                  className="creator-input"
+                  type="url"
+                  placeholder="https://example.com/audio.mp3"
+                  value={currentQ.audio}
+                  onChange={e => updateAudio(activeQuestion, e.target.value)}
+                />
+                {currentQ.audio && (
+                  <audio
+                    controls
+                    src={currentQ.audio}
+                    className="media-audio-preview"
+                  />
+                )}
+              </div>
             </div>
           </div>
 

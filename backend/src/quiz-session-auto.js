@@ -317,7 +317,9 @@ class AutoQuizSession {
       totalQuestions: this.quizData.questions.length,
       question: {
         text: question.question,
-        answers: question.answers.map((text, id) => ({ id, text }))
+        answers: question.answers.map((text, id) => ({ id, text })),
+        ...(question.image ? { image: question.image } : {}),
+        ...(question.audio ? { audio: question.audio } : {})
       },
       timeLimit
     });

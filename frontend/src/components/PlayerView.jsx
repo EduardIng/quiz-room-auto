@@ -81,6 +81,9 @@ export default function PlayerView() {
   const timerRef = useRef(null);
   const countdownRef = useRef(null);
 
+  // ── Ref для аудіо ──
+  const audioRef = useRef(null);
+
   // ─────────────────────────────────────────────
   // ІНІЦІАЛІЗАЦІЯ SOCKET.IO
   // ─────────────────────────────────────────────
@@ -138,6 +141,7 @@ export default function PlayerView() {
       case 'NEW_QUESTION':
         // Очищаємо попередній стан
         clearInterval(timerRef.current);
+        if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
         setSelectedAnswer(null);
         setAnsweredCount(0);
 
@@ -153,6 +157,12 @@ export default function PlayerView() {
 
         // Запускаємо таймер зворотного відліку
         startQuestionTimer(data.timeLimit);
+
+        // Авто-програємо аудіо якщо є
+        if (data.question.audio && audioRef.current) {
+          audioRef.current.src = data.question.audio;
+          audioRef.current.play().catch(() => {});
+        }
         break;
 
       // ── Оновлення лічильника відповідей ──
@@ -164,6 +174,7 @@ export default function PlayerView() {
       // ── Розкриття правильної відповіді ──
       case 'REVEAL_ANSWER':
         clearInterval(timerRef.current);
+        if (audioRef.current) { audioRef.current.pause(); }
         handleRevealAnswer(data);
         break;
 
@@ -387,6 +398,8 @@ export default function PlayerView() {
 
   return (
     <div className="player-view">
+      {/* Hidden audio element for music questions */}
+      <audio ref={audioRef} loop />
 
       {/* ── 1. JOIN ЕКРАН ── */}
       {screen === 'join' && (
@@ -492,6 +505,35 @@ export default function PlayerView() {
               style={{ width: `${timerPercent}%` }}
             />
           </div>
+
+          {/* Зображення питання (якщо є) */}
+          {question.image && (
+            <div className="question-image-wrap">
+              <img
+                src={question.image}
+                alt="Question"
+                className="question-image"
+                onError={e => { e.target.style.display = 'none'; }}
+              />
+            </div>
+          )}
+
+          {/* Аудіо питання — кнопка повтору (якщо є) */}
+          {question.audio && (
+            <div className="question-audio-bar">
+              <span className="audio-icon">🎵</span>
+              <span className="audio-label">Музичне питання</span>
+              <button
+                className="audio-replay-btn"
+                onClick={() => {
+                  if (audioRef.current) {
+                    audioRef.current.currentTime = 0;
+                    audioRef.current.play().catch(() => {});
+                  }
+                }}
+              >▶ Повтор</button>
+            </div>
+          )}
 
           {/* Текст питання */}
           <div className="question-text">{question.text}</div>
