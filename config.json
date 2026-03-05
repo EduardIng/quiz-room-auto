@@ -1,0 +1,24 @@
+{
+  "server": {
+    "port": 8080,
+    "host": "0.0.0.0"
+  },
+  "quiz": {
+    "autoMode": true,
+    "questionTime": 30,
+    "answerRevealTime": 5,
+    "leaderboardTime": 5,
+    "autoStart": true,
+    "waitForAllPlayers": true,
+    "minPlayers": 1,
+    "maxPlayers": 8
+  },
+  "display": {
+    "fullscreen": true,
+    "fontSize": "large"
+  },
+  "sounds": {
+    "enabled": true,
+    "volume": 0.7
+  }
+}
