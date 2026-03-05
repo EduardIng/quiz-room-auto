@@ -6,10 +6,16 @@
   "scripts": {
     "start": "node backend/src/server.js",
     "dev": "nodemon backend/src/server.js",
-    "test": "jest",
+    "test": "jest --forceExit",
     "build:frontend": "cd frontend && npm run build"
   },
-  "keywords": ["quiz", "trivia", "websocket", "real-time", "automated"],
+  "keywords": [
+    "quiz",
+    "trivia",
+    "websocket",
+    "real-time",
+    "automated"
+  ],
   "author": "EduardIng",
   "license": "MIT",
   "engines": {
@@ -26,5 +32,12 @@
   "devDependencies": {
     "nodemon": "^2.0.22",
     "jest": "^29.5.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "clearMocks": true
   }
 }
