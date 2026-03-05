@@ -32,3 +32,6 @@ coverage/
 # Temporary
 *.tmp
 .cache/
+
+# SQLite database (auto-created at runtime)
+data/
