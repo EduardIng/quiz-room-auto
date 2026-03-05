@@ -14,6 +14,43 @@ Phase 5: Optional Features   [██████████] 100% ✅
 
 ## Session Log
 
+### Session 2 — 2026-03-05
+**Status:** Complete (Phase 6 — Extended Features)
+
+---
+
+### Phase 6 — Extended Features ✅
+
+**Packages added:**
+- `better-sqlite3` — persistent SQLite storage
+- `qrcode` — QR code generation
+
+**Files created:**
+- `backend/src/db.js` — Singleton `QuizDatabase`: auto-creates `data/sessions.db`, tables for `sessions`, `results`, `question_stats`; methods: `saveSession()`, `getSessions()`, `getSessionResults()`, `getStats()`
+- `frontend/src/utils/i18n.js` — Ukrainian/English translation strings for all UI text
+- `frontend/src/utils/useLang.js` — `useLang()` hook → `[t, lang, setLang]`, persists to localStorage
+- `frontend/src/components/StatsPanel.jsx` — Statistics dashboard: summary cards (sessions, players, avg), session history table, expandable per-session leaderboard rows
+- `frontend/src/components/StatsPanel.css` — Dashboard styles
+
+**Files modified:**
+- `backend/src/quiz-session-auto.js` — Accepts optional `db` param; tracks `startedAt`; collects `collectedQuestionStats` per question; calls `db.saveSession()` at end of quiz
+- `backend/src/websocket-handler-auto.js` — Imports db singleton; passes it to new `AutoQuizSession` instances
+- `backend/src/server.js` — New endpoints: `GET /api/stats`, `GET /api/stats/session/:id`, `GET /api/qr/:roomCode`, `GET /api/quizzes`
+- `frontend/src/main.jsx` — Added `#/stats` → `<StatsPanel />` route
+- `frontend/src/components/AdminPanel.jsx` — i18n throughout; stats nav link; QR code image (80px) per session card; language toggle button
+- `frontend/src/components/QuizCreator.jsx` — i18n throughout; QR code (160px) on success screen; "Import JSON" (FileReader); "Load from library" dropdown (fetches `/api/quizzes`); language toggle
+- `frontend/src/components/PlayerView.jsx` — Pre-fills room code from `?room=` URL query param
+- `frontend/src/components/AdminPanel.css` — QR and lang toggle styles
+- `frontend/src/components/QuizCreator.css` — Import button, library dropdown, QR, lang toggle styles
+
+**Results:** 66/66 tests passed ✅
+
+**Production build:** 219 KB JS + 27 KB CSS (gzip: 69 KB + 5.2 KB)
+
+**Git commit:** `6da6c16` — pushed to `origin/main`
+
+---
+
 ### Session 1 — 2026-03-05
 **Status:** Complete (Phases 0–4)
 
@@ -98,11 +135,6 @@ Phase 5: Optional Features   [██████████] 100% ✅
 
 ---
 
-## Next: Phase 5 — Optional Features
+## Project Status: Complete ✅
 
-Potential additions (by request):
-- Sound effects (correct/wrong/timeout)
-- Admin panel for monitoring active games
-- Quiz creator UI (build quizzes in browser)
-- Question shuffle
-- Statistics dashboard
+All planned features shipped. No pending phases.
