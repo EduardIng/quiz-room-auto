@@ -32,6 +32,8 @@ cd quiz-room-auto
 npm install
 ```
 
+This installs all backend packages including `better-sqlite3` (persistent storage) and `qrcode` (QR generation).
+
 Expected output: `added N packages`
 
 ### Step 3: Install and build frontend
@@ -71,6 +73,8 @@ Expected output:
 
 Open `http://localhost:8080` in a browser to verify.
 
+The `data/` directory and `data/sessions.db` SQLite database are created automatically on first run.
+
 ---
 
 ## Configuration
@@ -81,7 +85,7 @@ All settings live in `config.json` at the project root.
 
 ```json
 "server": {
-  "port": 8080,    // HTTP port (change if 8080 is taken)
+  "port": 8080,     // HTTP port (change if 8080 is taken)
   "host": "0.0.0.0" // Listen on all interfaces (required for LAN access)
 }
 ```
@@ -125,6 +129,8 @@ All settings live in `config.json` at the project root.
 
 ## Adding Your Own Quizzes
 
+### Option A — Drop a JSON file into `quizzes/`
+
 Create a `.json` file in the `quizzes/` directory:
 
 ```json
@@ -142,6 +148,8 @@ Create a `.json` file in the `quizzes/` directory:
 }
 ```
 
+The file appears automatically in the "Load from library" dropdown in the Quiz Creator UI.
+
 **Field reference:**
 
 | Field | Type | Required | Description |
@@ -153,6 +161,35 @@ Create a `.json` file in the `quizzes/` directory:
 | `answers` | string[4] | ✅ | Exactly 4 answer options |
 | `correctAnswer` | number | ✅ | Index of correct answer (0–3) |
 | `timeLimit` | number | — | Per-question override (10–120s) |
+
+### Option B — Use the Quiz Creator UI
+
+Open `http://localhost:8080#/create` to build a quiz in the browser.
+
+- Type questions and answers directly
+- Click a letter button (A/B/C/D) to mark the correct answer
+- Set a per-question timer override (optional)
+- Click **⬇ Save JSON** to export the quiz as a file
+- Click **⬆ Import JSON** to load a previously saved JSON file
+- Click **📂 From library** to load any quiz from the `quizzes/` folder
+
+### Option C — Import JSON in the UI
+
+Click **⬆ Import JSON** in the Quiz Creator to load any `.json` file from your computer. The editor is populated with its content, which you can review or edit before launching.
+
+---
+
+## Persistent Storage
+
+Session results are automatically saved to `data/sessions.db` (SQLite) at the end of every completed quiz. No configuration is needed — the file is created on first run.
+
+To view history, open `http://localhost:8080#/stats` or query the API:
+
+```bash
+curl http://localhost:8080/api/stats
+```
+
+The database file can be backed up by simply copying `data/sessions.db`.
 
 ---
 
@@ -184,6 +221,8 @@ If port 8080 is already in use:
 
 1. Edit `config.json`: change `"port": 8080` to another value (e.g. `3001`)
 2. Restart the server
+
+Note: QR codes encode the server's LAN IP and port at the time of room creation. If you change the port, existing QR codes become invalid.
 
 ---
 

@@ -7,26 +7,128 @@ How to run quiz sessions from start to finish.
 ## Quick Flow
 
 ```
-1. Host starts server  →  npm start
-2. Host opens browser  →  http://localhost:8080
-3. Host creates room   →  POST /api/create-quiz (or via UI when available)
-4. Players join        →  enter room code + nickname on their phones
-5. Game runs itself    →  automatic questions, timers, reveals, leaderboard
-6. Quiz ends           →  final standings shown to everyone
+1. Host starts server   →  npm start
+2. Host opens browser   →  http://localhost:8080#/create
+3. Host creates room    →  Quiz Creator UI → Launch Quiz → room code + QR appear
+4. Players join         →  scan QR code OR open app and type room code + nickname
+5. Game runs itself     →  automatic questions, timers, reveals, leaderboard
+6. Quiz ends            →  final standings shown to everyone, results saved to DB
+7. View history         →  http://localhost:8080#/stats
 ```
 
 ---
 
-## Starting a Session via WebSocket
+## Pages
 
-The primary way to start a game is via the WebSocket API. Here is a complete example using the browser console or a simple HTML client:
+| URL | Who uses it | Purpose |
+|-----|-------------|---------|
+| `http://localhost:8080` | Players | Join screen (room code + nickname) |
+| `http://localhost:8080/?room=AB3C7D` | Players | Join with room code pre-filled |
+| `http://localhost:8080#/create` | Host | Create and launch a quiz |
+| `http://localhost:8080#/admin` | Host | Monitor all active rooms live |
+| `http://localhost:8080#/stats` | Host | View completed session history |
 
-### 1. Connect and create a room
+---
+
+## Creating a Quiz (Browser UI)
+
+### Step 1 — Open the Quiz Creator
+
+```
+http://localhost:8080#/create
+```
+
+### Step 2 — Build your quiz
+
+- Enter a **quiz title**
+- Add questions with the **+ Add question** button
+- For each question: enter text, fill in 4 answers, click the letter button to mark the correct one
+- Optionally set a per-question timer (overrides the global setting)
+
+### Step 3 — Or load an existing quiz
+
+- **⬆ Import JSON** — load a `.json` file from your computer
+- **📂 From library** — pick any quiz from the `quizzes/` folder on the server
+
+### Step 4 — Configure settings
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| Time per question | 30s | Overridable per-question |
+| Min. players | 1 | Game auto-starts when this many join |
+| Autostart | on | Disable to start manually |
+
+### Step 5 — Launch
+
+Click **🚀 Launch Quiz**. On success you'll see:
+- The 6-character **room code** (large, shareable)
+- A **QR code** — players scan it to open the join URL directly
+
+### Step 6 — Save for later (optional)
+
+Click **⬇ Save JSON** at any point to download the quiz as a file. Drop it in `quizzes/` to make it available in the library.
+
+---
+
+## Players Joining
+
+Players have three ways to join:
+
+1. **Scan the QR code** displayed after room creation or on the admin panel — opens the join page with the room code already filled in
+2. **Direct URL** — share `http://[server-ip]:8080/?room=AB3C7D`; the room code field is pre-filled
+3. **Manual entry** — open `http://[server-ip]:8080` and type the code + nickname
+
+**Player flow (8 screens):**
+
+| Screen | What the player sees |
+|--------|---------------------|
+| JOIN | Room code input + nickname input |
+| WAITING | List of connected players, pulsing dots |
+| STARTING | 3-second countdown animation |
+| QUESTION | Question text + 4 colour-coded buttons + timer bar |
+| ANSWER_SENT | "Answer submitted" + waiting for others |
+| REVEAL | ✅/❌ result + points earned + correct answer |
+| LEADERBOARD | Ranked list with medals 🥇🥈🥉 |
+| ENDED | Final position + stats + "Play Again" |
+
+---
+
+## Admin Panel
+
+```
+http://localhost:8080#/admin
+```
+
+Shows all active rooms in real time (polls every 2 seconds):
+- Room code, quiz title, current game state, player count
+- QR code for each room (80px) — point a camera at it to join instantly
+- Copy-to-clipboard button for the room code
+- Link to the statistics dashboard
+
+---
+
+## Statistics Dashboard
+
+```
+http://localhost:8080#/stats
+```
+
+Displays all completed sessions saved to `data/sessions.db`:
+- **Summary cards** — total sessions, total players, average players per session
+- **Session history table** — date, quiz title, player count, top scorer
+- **Expandable rows** — click "Leaderboard" on any row to see the full ranked results
+
+Results are saved automatically at the end of every quiz. No setup required.
+
+---
+
+## Starting a Session via WebSocket (advanced)
+
+The UI handles this for you, but you can also create rooms programmatically:
 
 ```javascript
 const socket = io('http://localhost:8080');
 
-// Create a quiz room
 socket.emit('create-quiz', {
   quizData: {
     title: 'Friday Night Quiz',
@@ -35,11 +137,6 @@ socket.emit('create-quiz', {
         question: 'What year did Ukraine gain independence?',
         answers: ['1989', '1991', '1993', '1995'],
         correctAnswer: 1
-      },
-      {
-        question: 'How many regions (oblasts) does Ukraine have?',
-        answers: ['20', '22', '25', '27'],
-        correctAnswer: 2
       }
     ]
   },
@@ -54,36 +151,9 @@ socket.emit('create-quiz', {
 }, (response) => {
   if (response.success) {
     console.log('Room code:', response.roomCode);
-    // Display this code on a projector screen for players to see
+    // Generate QR: GET /api/qr/AB3C7D
   }
 });
-```
-
-### 2. Players join from their phones
-
-Each player opens the web app and enters:
-- **Room code** — the 6-character code shown above
-- **Nickname** — any name 2–20 characters
-
-```javascript
-// This runs on the player's device
-socket.emit('join-quiz', {
-  roomCode: 'ABC123',
-  nickname: 'Olena'
-}, (response) => {
-  if (response.success) {
-    console.log('Joined!', response.gameState);
-  }
-});
-```
-
-### 3. Game runs automatically
-
-Once `minPlayers` join (default: 1), the game starts automatically:
-
-```
-3 seconds countdown  →  Question 1 displays  →  Timer counts down
-→  Answer revealed  →  Leaderboard shows  →  Question 2  →  ...  →  Final results
 ```
 
 Players receive `quiz-update` events throughout:
@@ -101,52 +171,7 @@ socket.on('quiz-update', (data) => {
 });
 ```
 
-### 4. Submitting an answer
-
-```javascript
-socket.emit('submit-answer', { answerId: 2 }, (response) => {
-  // answerId: 0, 1, 2, or 3 (index of chosen answer)
-  console.log(response.success ? 'Answer accepted!' : response.error);
-});
-```
-
----
-
-## Using the Pre-Built Frontend
-
-The React frontend at `http://localhost:8080` provides a ready-made player interface.
-
-**Player flow (7 screens):**
-
-| Screen | What the player sees |
-|--------|---------------------|
-| JOIN | Room code input + nickname input |
-| WAITING | List of connected players, pulsing dots |
-| STARTING | 3-second countdown animation |
-| QUESTION | Question text + 4 colour-coded buttons + timer bar |
-| ANSWER_SENT | "Answer submitted" + waiting for others |
-| REVEAL | ✅/❌ result + points earned + correct answer |
-| LEADERBOARD | Ranked list with medals 🥇🥈🥉 |
-| ENDED | Final position + stats + "Play Again" |
-
----
-
-## Loading Quizzes from Files
-
-Quizzes stored in the `quizzes/` directory can be loaded via the storage API:
-
-```javascript
-const { loadAllQuizzes, loadQuizById } = require('./backend/src/quiz-storage');
-
-// Load all quizzes
-const quizzes = loadAllQuizzes();
-
-// Load one by ID (filename without .json)
-const quiz = loadQuizById('dummy-quiz-1');
-
-// Use it to create a room
-socket.emit('create-quiz', { quizData: quiz }, callback);
-```
+See [API.md](API.md) for full event payloads.
 
 ---
 
@@ -162,56 +187,49 @@ totalPoints = basePoints + timeBonus
 
 **Example:** Question time = 30s, player answers in 5s:
 ```
-100 + (30 - 5) × 2 = 100 + 50 = 150 points
+100 + (30 - 5) × 2 = 150 points
 ```
 
-**Tiebreaker:** If two players have the same score, the one with the lower average answer time wins.
+**Tiebreaker:** Equal scores → lower average answer time wins.
 
 ---
 
-## Checking Server Health
+## Language Toggle
+
+Every page has a **UK / EN** button to switch between Ukrainian and English. The preference is saved in `localStorage` and persists across sessions.
+
+---
+
+## Useful API Calls
 
 ```bash
+# Server health
 curl http://localhost:8080/health
-```
 
-```json
-{
-  "status": "ok",
-  "uptime": 142,
-  "activeSessions": 1,
-  "timestamp": "2026-03-05T17:00:00.000Z"
-}
-```
-
----
-
-## Listing Active Rooms
-
-```bash
+# Active rooms
 curl http://localhost:8080/api/active-quizzes
-```
 
-```json
-{
-  "success": true,
-  "sessions": [
-    {
-      "roomCode": "AB3C7D",
-      "title": "Friday Night Quiz",
-      "playerCount": 5,
-      "gameState": "QUESTION"
-    }
-  ]
-}
+# Quiz library (files in quizzes/)
+curl http://localhost:8080/api/quizzes
+
+# Session history (SQLite)
+curl http://localhost:8080/api/stats
+
+# Leaderboard for session id=3
+curl http://localhost:8080/api/stats/session/3
+
+# QR code for a room (returns image/png)
+curl http://localhost:8080/api/qr/AB3C7D --output qr.png
 ```
 
 ---
 
 ## Tips for Live Events
 
-- **Display the room code** on a TV/projector using the big screen at the venue
+- **Show the QR code on a projector** — players can scan without typing anything
+- **Use `/?room=CODE` links** — pre-fill the room code in shared links or on printed cards
 - **Set `questionTime: 20`** for fast-paced games; `30` for harder questions
-- **Set `minPlayers: 2`** so the game doesn't auto-start until at least 2 people join
-- **Use `waitForAllPlayers: true`** so fast players don't wait the full timer once everyone has answered
+- **Set `minPlayers: 2`** so the game doesn't auto-start before enough people join
+- **Use `waitForAllPlayers: true`** so fast players don't wait once everyone has answered
+- **Check `#/stats` after each night** — full session history is saved automatically
 - **Run on a wired ethernet connection** for the host machine — Wi-Fi is fine for players
