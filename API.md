@@ -47,7 +47,9 @@ socket.emit('create-quiz', {
           string, string, string, string
         ],
         correctAnswer: number,  // Required. Index 0–3
-        timeLimit: number       // Optional. Overrides config.questionTime
+        timeLimit: number,      // Optional. Overrides config.questionTime
+        image: string,          // Optional. URL of image to show above question
+        audio: string           // Optional. URL of audio to auto-play
       }
     ]
   },
@@ -217,7 +219,9 @@ Broadcast when a new question is displayed. **Does NOT include the correct answe
       { id: 1, text: string },
       { id: 2, text: string },
       { id: 3, text: string }
-    ]
+    ],
+    image?: string,          // Optional. URL of image to display above question text
+    audio?: string           // Optional. URL of audio to auto-play during question
   },
   timeLimit: number        // Seconds for this question
 }

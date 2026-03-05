@@ -44,6 +44,9 @@ http://localhost:8080#/create
 - Add questions with the **+ Add question** button
 - For each question: enter text, fill in 4 answers, click the letter button to mark the correct one
 - Optionally set a per-question timer (overrides the global setting)
+- Optionally add an **image URL** — shown above the question text on players' screens (🖼 badge appears on the list item)
+- Optionally add an **audio URL** — auto-plays when the question starts, stops at answer reveal; replay button shown to players (🎵 badge appears on the list item)
+- **Drag questions** by the ⠿ handle to reorder them
 
 ### Step 3 — Or load an existing quiz
 
@@ -233,3 +236,5 @@ curl http://localhost:8080/api/qr/AB3C7D --output qr.png
 - **Use `waitForAllPlayers: true`** so fast players don't wait once everyone has answered
 - **Check `#/stats` after each night** — full session history is saved automatically
 - **Run on a wired ethernet connection** for the host machine — Wi-Fi is fine for players
+- **For image questions**, use direct image URLs (Imgur, Wikimedia Commons, or your own server) — the image appears above the question text on every player's screen
+- **For music questions**, ask players to tap the screen once before the quiz starts to avoid browser autoplay blocks; the 🎵 Replay button lets anyone manually start the audio if it was blocked

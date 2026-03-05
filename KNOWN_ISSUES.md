@@ -66,16 +66,32 @@ Each issue: ID, status, description, workaround.
 
 ---
 
-## KI-006 🔴 `data/sessions.db` not excluded from git
+## KI-006 🟢 `data/sessions.db` not excluded from git
 
 **Affects:** Version control
 
-**Description:** The `data/` directory containing the SQLite database is not in `.gitignore`. If committed, it could expose session history in the repository.
+**Description:** The `data/` directory containing the SQLite database was not in `.gitignore`.
 
-**Workaround:** Add `data/` to `.gitignore`:
-```bash
-echo "data/" >> .gitignore
-git rm -r --cached data/ 2>/dev/null; git add .gitignore
-```
+**Resolution:** `data/` added to `.gitignore` in v1.1.0 commit.
+
+---
+
+## KI-007 🔴 Browser autoplay policy may block audio questions
+
+**Affects:** `audio` field in quiz questions — `PlayerView.jsx`
+
+**Description:** Modern browsers (Chrome, Safari, Firefox) block audio auto-play unless the user has previously interacted with the page. If a player joins and the first question has audio, the browser may silently reject the auto-play call.
+
+**Workaround:** The `audio.play()` call is wrapped in `.catch(() => {})` to suppress errors. A **replay button** (🎵 Replay) is displayed in the audio bar so players can tap it to start playback manually after the first blocked attempt. Players who join after any tap/click interaction will have auto-play succeed.
+
+---
+
+## KI-008 🔴 External media URLs may be blocked by CORS
+
+**Affects:** `image` and `audio` fields — `PlayerView.jsx`
+
+**Description:** If an image or audio URL points to a server that sends `Access-Control-Allow-Origin: <specific domain>` that does not include the quiz server's origin, the browser may block the resource. This is enforced by the browser, not the quiz server.
+
+**Workaround:** Use URLs from public CDNs or image hosts that allow cross-origin access (e.g. Imgur, Wikimedia Commons, direct file paths on the same LAN server). Self-hosted files served from the same origin (`http://<server-ip>:8080/...`) are always allowed.
 
 ---

@@ -83,3 +83,36 @@ Each decision includes: date, problem, options considered, chosen solution, reas
 **Reasoning:** Session history is only useful if it survives across server restarts and multiple quiz nights. Polling active sessions gives no historical data. Writing to SQLite at the end of `endQuiz()` is a single atomic transaction and adds no latency to the game flow.
 
 ---
+
+## Decision 008 - 2026-03-05
+**Problem:** Image and audio in questions — URL reference vs. file upload
+**Options:**
+- A: URL reference — host stores media elsewhere, quiz JSON contains a URL string
+- B: File upload — server stores media files, quiz JSON references internal paths
+
+**Chosen:** URL reference (Option A)
+**Reasoning:** File upload requires multipart form handling, static file serving, storage management, and size limits — significant infrastructure for an optional feature. URL references keep the backend unchanged: the quiz JSON gains two optional fields (`image`, `audio`), and the browser fetches media directly. Venues typically already host images on an existing server or CDN.
+
+---
+
+## Decision 009 - 2026-03-05
+**Problem:** Drag-to-reorder questions — library vs. HTML5 native DnD
+**Options:**
+- A: `react-beautiful-dnd` or `dnd-kit` — polished UX, large bundle (~25–60 KB gzip)
+- B: HTML5 Drag and Drop API — zero new dependencies, ~30 lines of code
+
+**Chosen:** HTML5 DnD (Option B)
+**Reasoning:** The quiz creator is a desktop/tablet tool — mobile drag quirks of the HTML5 API (which affect touch devices) are acceptable. Adding a large drag library for a single list within one component is not justified. The `draggable` prop + four event handlers (`dragstart`, `dragover`, `drop`, `dragend`) are sufficient.
+
+---
+
+## Decision 010 - 2026-03-05
+**Problem:** Audio playback — stop at answer reveal vs. play to end
+**Options:**
+- A: Stop audio when REVEAL_ANSWER arrives — clean transition, no bleed
+- B: Let audio finish its current loop — simpler, but music plays over the answer screen
+
+**Chosen:** Stop at reveal (Option A)
+**Reasoning:** The audio bar disappears on the answer-reveal screen. If music continued playing invisibly during the answer, it would be confusing. Calling `audioRef.current.pause()` in the REVEAL_ANSWER handler keeps the experience clean. The `loop` attribute means music fills the full question duration without requiring a track of exactly the right length.
+
+---

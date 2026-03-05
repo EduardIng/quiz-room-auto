@@ -8,11 +8,38 @@ Phase 2: Player Interface    [██████████] 100% ✅
 Phase 3: Testing & Polish    [██████████] 100% ✅
 Phase 4: Documentation       [██████████] 100% ✅
 Phase 5: Optional Features   [██████████] 100% ✅
+Phase 6: Extended Features   [██████████] 100% ✅
+Phase 7: Rich Media          [██████████] 100% ✅
 ```
 
 ---
 
 ## Session Log
+
+### Session 3 — 2026-03-05
+**Status:** Complete (Phase 7 — Rich Media)
+
+---
+
+### Phase 7 — Rich Media ✅
+
+**No new packages.** All features use browser-native APIs and existing infrastructure.
+
+**Files modified:**
+- `backend/src/quiz-session-auto.js` — NEW_QUESTION broadcast spreads `image` and `audio` fields from the quiz JSON when present
+- `frontend/src/utils/i18n.js` — added `imageUrl` and `audioUrl` keys in both UK and EN translations
+- `frontend/src/components/QuizCreator.jsx` — `EMPTY_QUESTION` extended with `image`/`audio` fields; image URL input + live `<img>` thumbnail preview; audio URL input + `<audio controls>` preview; `🖼`/`🎵` badges on question list items; drag-to-reorder with HTML5 DnD API (`draggable` prop, `dragIndexRef`, `dragOverIndex` state, four drag handlers); question list items changed from `<button>` to `<div>` to support `draggable`; `⠿` drag handle icon
+- `frontend/src/components/QuizCreator.css` — `.question-list-item.drag-over`, `.q-drag-handle`, `.media-url-row`, `.media-preview-thumb`, `.media-audio-preview` styles
+- `frontend/src/components/PlayerView.jsx` — `audioRef = useRef(null)`, hidden `<audio ref={audioRef} loop />` element; NEW_QUESTION handler auto-plays audio when `data.question.audio` present; REVEAL_ANSWER handler pauses audio; question screen shows `<div class="question-image-wrap"><img>` above text when image present; audio bar with pulsing 🎵 icon and replay button
+- `frontend/src/components/PlayerView.css` — `.question-image-wrap`, `.question-image`, `.question-audio-bar`, `.audio-icon` (pulse animation), `.audio-replay-btn`
+
+**Results:** 66/66 tests passed ✅
+
+**Production build:** 220 KB JS + 28 KB CSS
+
+**Git tag:** `v1.2.0` — pushed to `origin/main`
+
+---
 
 ### Session 2 — 2026-03-05
 **Status:** Complete (Phase 6 — Extended Features)

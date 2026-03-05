@@ -15,6 +15,7 @@ Phase 3: Testing & Polish    [██████████] 100% ✅
 Phase 4: Documentation       [██████████] 100% ✅
 Phase 5: Optional Features   [██████████] 100% ✅
 Phase 6: Extended Features   [██████████] 100% ✅
+Phase 7: Rich Media          [██████████] 100% ✅
 ```
 Last Updated: 2026-03-05
 
@@ -43,6 +44,9 @@ Last Updated: 2026-03-05
 - **Sound effects** — correct, wrong, timeout, countdown, finish
 - **Admin panel** — live monitoring of all active rooms with real-time player counts
 - **Configurable timers** — per-quiz and per-question time limits
+- **Image questions** — optional image displayed above question text (URL-based)
+- **Music questions** — optional audio auto-plays on question start, with replay button
+- **Drag-to-reorder** — drag questions into position in the Quiz Creator
 
 ---
 

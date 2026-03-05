@@ -161,6 +161,8 @@ The file appears automatically in the "Load from library" dropdown in the Quiz C
 | `answers` | string[4] | ✅ | Exactly 4 answer options |
 | `correctAnswer` | number | ✅ | Index of correct answer (0–3) |
 | `timeLimit` | number | — | Per-question override (10–120s) |
+| `image` | string | — | URL of image displayed above the question text |
+| `audio` | string | — | URL of audio that auto-plays when the question starts |
 
 ### Option B — Use the Quiz Creator UI
 
