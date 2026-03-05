@@ -13,7 +13,8 @@ Phase 1: Core Automation     [██████████] 100% ✅
 Phase 2: Player Interface    [██████████] 100% ✅
 Phase 3: Testing & Polish    [██████████] 100% ✅
 Phase 4: Documentation       [██████████] 100% ✅
-Phase 5: Optional Features   [░░░░░░░░░░]   0%
+Phase 5: Optional Features   [██████████] 100% ✅
+Phase 6: Extended Features   [██████████] 100% ✅
 ```
 Last Updated: 2026-03-05
 
@@ -24,10 +25,24 @@ Last Updated: 2026-03-05
 **Quiz Room Auto** is a self-running quiz system designed for bars, restaurants, and event venues. Once a quiz is started, the system automatically advances through questions, reveals answers, shows leaderboards, and ends the game — no host clicking required.
 
 **How it works:**
-1. Host opens the web UI and loads a quiz → a 6-character room code is generated
-2. Players join on their phones/tablets by entering the room code + a nickname
+1. Host opens the web UI and creates a quiz → a 6-character room code + QR code are generated
+2. Players join on their phones/tablets by scanning the QR code or entering the room code manually
 3. The quiz runs automatically: questions → timer → answer reveal → leaderboard → repeat
-4. Final results are shown at the end
+4. Final results are shown at the end and saved to a local SQLite database
+
+---
+
+## Features
+
+- **Fully automated** — state machine advances the game without any host interaction
+- **Browser-based** — players join on any phone or tablet, no app install required
+- **QR codes** — scan to join; shown on the admin panel and creator success screen
+- **Quiz creator UI** — build quizzes in the browser, import/export JSON, load from library
+- **Statistics dashboard** — persistent history of all sessions with per-session leaderboards
+- **Multi-language** — Ukrainian and English UI (toggle in every view)
+- **Sound effects** — correct, wrong, timeout, countdown, finish
+- **Admin panel** — live monitoring of all active rooms with real-time player counts
+- **Configurable timers** — per-quiz and per-question time limits
 
 ---
 
@@ -60,6 +75,19 @@ Players on the same network connect via:
 http://10.0.1.36:8080   ← your local IP shown in terminal on startup
 ```
 
+Or scan the QR code shown after creating a room — it encodes the join URL automatically.
+
+---
+
+## Pages
+
+| URL | Description |
+|-----|-------------|
+| `/` or `/?room=CODE` | Player join screen (room code pre-filled if provided) |
+| `#/create` | Quiz creator — build, import, or load from library |
+| `#/admin` | Admin panel — live session monitor with QR codes |
+| `#/stats` | Statistics dashboard — completed session history |
+
 ---
 
 ## Documentation
@@ -68,7 +96,7 @@ http://10.0.1.36:8080   ← your local IP shown in terminal on startup
 |------|-------------|
 | [SETUP.md](SETUP.md) | Full installation & configuration guide |
 | [USAGE.md](USAGE.md) | How to create and run quiz sessions |
-| [API.md](API.md) | WebSocket events reference |
+| [API.md](API.md) | HTTP endpoints & WebSocket events reference |
 | [PROGRESS_LOG.md](PROGRESS_LOG.md) | Development history |
 | [GLOSSARY.md](GLOSSARY.md) | Technical terms in Ukrainian |
 | [DECISIONS.md](DECISIONS.md) | Architecture decisions |
@@ -81,8 +109,10 @@ http://10.0.1.36:8080   ← your local IP shown in terminal on startup
 | Layer | Technology |
 |-------|-----------|
 | Backend | Node.js 25, Express 4, Socket.IO 4 |
+| Database | SQLite via better-sqlite3 |
 | Frontend | React 18, Vite 4 |
 | Real-time | WebSocket (Socket.IO) |
+| QR codes | qrcode (server-side PNG generation) |
 | Testing | Jest 29 (66 tests) |
 
 ---
@@ -97,18 +127,29 @@ quiz-room-auto/
 │   │   ├── quiz-session-auto.js       # State machine (core logic)
 │   │   ├── websocket-handler-auto.js  # WebSocket event handlers
 │   │   ├── quiz-storage.js            # Load quizzes from disk
+│   │   ├── db.js                      # SQLite persistence (sessions, results)
 │   │   └── utils.js                   # Config loader, logging
 │   └── tests/
 │       ├── session.test.js            # 44 unit tests
 │       └── websocket.test.js          # 22 unit tests
 ├── frontend/
 │   ├── src/
-│   │   ├── components/PlayerView.jsx  # 7-screen player UI
+│   │   ├── components/
+│   │   │   ├── PlayerView.jsx         # 7-screen player UI
+│   │   │   ├── AdminPanel.jsx         # Live session monitor
+│   │   │   ├── QuizCreator.jsx        # Quiz builder + import
+│   │   │   └── StatsPanel.jsx         # Session history dashboard
+│   │   ├── utils/
+│   │   │   ├── i18n.js                # UK/EN translations
+│   │   │   ├── useLang.js             # Language hook
+│   │   │   └── sound.js               # Sound effects
 │   │   └── styles/theme.css           # Dark theme variables
 │   └── public/                        # Static assets
 ├── quizzes/
 │   ├── dummy-quiz-1.json              # Sample: general knowledge
 │   └── dummy-quiz-2.json              # Sample: technology
+├── data/
+│   └── sessions.db                    # SQLite database (auto-created)
 ├── config.json                        # All timers & settings
 └── package.json
 ```
