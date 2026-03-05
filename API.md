@@ -353,6 +353,101 @@ List all active quiz rooms.
 
 ---
 
+### `GET /api/quizzes`
+
+List all quiz files found in the `quizzes/` directory. Used by the QuizCreator "Load from library" feature.
+
+**Response:**
+```json
+{
+  "success": true,
+  "quizzes": [
+    {
+      "id": "dummy-quiz-1",
+      "title": "General Knowledge",
+      "description": "",
+      "questions": [ /* full question objects */ ]
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/stats`
+
+Returns aggregate statistics and a history of completed sessions (up to 50, newest first). Data is persisted in `data/sessions.db` (SQLite).
+
+**Response:**
+```json
+{
+  "success": true,
+  "totals": {
+    "total_sessions": 12,
+    "total_players": 47,
+    "avg_players": 3.9
+  },
+  "sessions": [
+    {
+      "id": 12,
+      "room_code": "AB3C7D",
+      "title": "Friday Night Quiz",
+      "started_at": 1741200000000,
+      "ended_at": 1741200900000,
+      "total_questions": 10,
+      "player_count": 4,
+      "topScorer": {
+        "nickname": "Alice",
+        "score": 1240
+      }
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/stats/session/:id`
+
+Returns the full leaderboard for a single completed session.
+
+**Parameters:**
+- `:id` — integer session ID (from `/api/stats`)
+
+**Response:**
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "position": 1,
+      "nickname": "Alice",
+      "score": 1240,
+      "correct_answers": 9,
+      "avg_answer_time": 4.2
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/qr/:roomCode`
+
+Generates a QR code PNG image that encodes the player join URL for the given room. Scan to open `http://<server-ip>:8080/?room=ROOMCODE` directly.
+
+**Parameters:**
+- `:roomCode` — 6-character room code (case-insensitive, auto-uppercased)
+
+**Response:** `image/png` — 256×256 px PNG buffer
+
+**Example usage in HTML:**
+```html
+<img src="/api/qr/AB3C7D" width="160" height="160" alt="QR code" />
+```
+
+---
+
 ## State Machine
 
 ```
