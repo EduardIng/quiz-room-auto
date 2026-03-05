@@ -23,7 +23,10 @@ class AutoQuizSession {
    */
   constructor(quizData, settings) {
     // Дані квізу: назва, питання
-    this.quizData = quizData;
+    // Якщо shuffle увімкнено — перемішуємо копію масиву питань (не змінюємо оригінал)
+    this.quizData = settings.shuffle
+      ? { ...quizData, questions: this._shuffleArray([...quizData.questions]) }
+      : quizData;
 
     // Налаштування: таймери, autoStart, waitForAllPlayers тощо
     this.settings = settings;
@@ -724,6 +727,27 @@ class AutoQuizSession {
       nickname: p.nickname,
       score: p.score
     }));
+  }
+
+  /**
+   * Перемішує масив за алгоритмом Fisher-Yates (Durstenfeld variant)
+   *
+   * Повертає новий перемішаний масив (оригінал не змінюється).
+   * Кожна перестановка рівноймовірна — справжнє випадкове перемішування.
+   *
+   * @param {Array} array - Масив для перемішування
+   * @returns {Array} Новий перемішаний масив
+   * @private
+   */
+  _shuffleArray(array) {
+    // Йдемо з кінця масиву до початку
+    for (let i = array.length - 1; i > 0; i--) {
+      // Вибираємо випадковий індекс від 0 до i включно
+      const j = Math.floor(Math.random() * (i + 1));
+      // Міняємо місцями елементи i та j
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
   }
 
   /**

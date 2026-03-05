@@ -11,7 +11,8 @@
     "autoStart": true,
     "waitForAllPlayers": true,
     "minPlayers": 1,
-    "maxPlayers": 8
+    "maxPlayers": 8,
+    "shuffle": false
   },
   "display": {
     "fullscreen": true,

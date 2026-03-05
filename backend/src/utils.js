@@ -30,7 +30,8 @@ const DEFAULT_CONFIG = {
     autoStart: true,
     waitForAllPlayers: true,
     minPlayers: 1,
-    maxPlayers: 8
+    maxPlayers: 8,
+    shuffle: false         // перемішувати порядок питань перед початком
   },
   display: {
     fullscreen: true,
@@ -85,6 +86,7 @@ function loadConfig() {
   config.quiz.autoMode = Boolean(config.quiz.autoMode);
   config.quiz.autoStart = Boolean(config.quiz.autoStart);
   config.quiz.waitForAllPlayers = Boolean(config.quiz.waitForAllPlayers);
+  config.quiz.shuffle = Boolean(config.quiz.shuffle);
   config.display.fullscreen = Boolean(config.display.fullscreen);
   config.sounds.enabled = Boolean(config.sounds.enabled);
 

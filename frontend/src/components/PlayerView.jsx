@@ -14,6 +14,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import './PlayerView.css';
+import { playCorrect, playWrong, playTimeout, playTick, playCountdown, playFinish } from '../utils/sound.js';
 
 // ─────────────────────────────────────────────
 // КОНСТАНТИ
@@ -173,6 +174,7 @@ export default function PlayerView() {
       // ── Квіз завершено ──
       case 'QUIZ_ENDED':
         setLeaderboard(data.finalLeaderboard || []);
+        playFinish();
         setScreen('ended');
         break;
 
@@ -201,6 +203,11 @@ export default function PlayerView() {
       remaining -= 1;
       setTimeLeft(remaining);
 
+      // Тікаємо звуком коли залишилось ≤ 5 секунд
+      if (remaining > 0 && remaining <= 5) {
+        playTick();
+      }
+
       // Таймер закінчився - сервер сам завершить питання
       if (remaining <= 0) {
         clearInterval(timerRef.current);
@@ -216,11 +223,13 @@ export default function PlayerView() {
   const startCountdown = useCallback((from) => {
     clearInterval(countdownRef.current);
     setCountdown(from);
+    playCountdown(); // перший бiп одразу
 
     let count = from;
     countdownRef.current = setInterval(() => {
       count -= 1;
       setCountdown(count);
+      if (count > 0) playCountdown();
       if (count <= 0) {
         clearInterval(countdownRef.current);
       }
@@ -309,6 +318,15 @@ export default function PlayerView() {
     const isCorrect = myResult?.isCorrect || false;
     const didNotAnswer = myResult?.didNotAnswer || false;
     const pointsEarned = myResult?.pointsEarned || 0;
+
+    // Звуковий ефект результату
+    if (didNotAnswer) {
+      playTimeout();
+    } else if (isCorrect) {
+      playCorrect();
+    } else {
+      playWrong();
+    }
 
     // Оновлюємо рахунок (додаємо зароблені бали)
     setMyScore(prev => prev + pointsEarned);
