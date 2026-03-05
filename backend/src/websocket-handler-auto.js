@@ -13,6 +13,7 @@
 
 const AutoQuizSession = require('./quiz-session-auto');
 const { log } = require('./utils');
+const db = require('./db');
 
 class QuizRoomManager {
   /**
@@ -131,7 +132,7 @@ class QuizRoomManager {
       };
 
       // Створюємо новий сеанс
-      const session = new AutoQuizSession(data.quizData, settings);
+      const session = new AutoQuizSession(data.quizData, settings, db);
       session.init(this.io, roomCode);
 
       // Зберігаємо сеанс

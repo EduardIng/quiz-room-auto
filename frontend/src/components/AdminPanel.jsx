@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import useLang from '../utils/useLang.js';
 import './AdminPanel.css';
 
 // Переклад станів гри для відображення
@@ -25,6 +26,8 @@ const STATE_LABELS = {
 };
 
 export default function AdminPanel() {
+  const [t, lang, setLang] = useLang();
+
   // Список активних сесій від API
   const [sessions, setSessions] = useState([]);
 
@@ -133,19 +136,27 @@ export default function AdminPanel() {
       {/* ── Хедер ── */}
       <header className="admin-header">
         <div className="admin-header-left">
-          <h1 className="admin-title">🎮 Quiz Room Admin</h1>
-          <p className="admin-subtitle">Моніторинг активних квізів</p>
+          <h1 className="admin-title">{t('adminTitle')}</h1>
+          <p className="admin-subtitle">{t('adminSubtitle')}</p>
         </div>
         <div className="admin-header-right">
           {/* Індикатор стану з'єднання */}
           <div className={`status-indicator ${status}`}>
             <span className="status-dot" />
             <span className="status-text">
-              {status === 'ok' ? 'Онлайн' : status === 'error' ? 'Помилка' : 'З\'єднання...'}
+              {status === 'ok' ? t('online') : status === 'error' ? t('error') : t('connecting')}
             </span>
           </div>
-          <a href="/" className="admin-nav-link">👤 Гравець</a>
-          <a href="#/create" className="admin-nav-link admin-nav-primary">+ Новий квіз</a>
+          <button
+            className="lang-toggle-admin"
+            onClick={() => setLang(lang === 'uk' ? 'en' : 'uk')}
+            title="Switch language"
+          >
+            {lang === 'uk' ? '🇬🇧 EN' : '🇺🇦 UK'}
+          </button>
+          <a href="/" className="admin-nav-link">{t('playerLink')}</a>
+          <a href="#/stats" className="admin-nav-link">{t('statsLink')}</a>
+          <a href="#/create" className="admin-nav-link admin-nav-primary">{t('newQuiz')}</a>
         </div>
       </header>
 
@@ -153,39 +164,39 @@ export default function AdminPanel() {
       <div className="admin-stats">
         <div className="stat-card">
           <div className="stat-card-value">{sessions.length}</div>
-          <div className="stat-card-label">Активних кімнат</div>
+          <div className="stat-card-label">{t('activeRooms')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value">
             {sessions.reduce((sum, s) => sum + s.playerCount, 0)}
           </div>
-          <div className="stat-card-label">Гравців онлайн</div>
+          <div className="stat-card-label">{t('playersOnline')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value">{formatUptime(serverUptime)}</div>
-          <div className="stat-card-label">Сервер працює</div>
+          <div className="stat-card-label">{t('serverUptime')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value">{formatTime(lastUpdate)}</div>
-          <div className="stat-card-label">Оновлено</div>
+          <div className="stat-card-label">{t('updated')}</div>
         </div>
       </div>
 
       {/* ── Список активних кімнат ── */}
       <div className="admin-content">
-        <h2 className="section-title">Активні кімнати</h2>
+        <h2 className="section-title">{t('activeRoomsTitle')}</h2>
 
         {status === 'error' && (
           <div className="admin-error">
-            ⚠️ Не вдається підключитись до сервера. Перевір що сервер запущений на порту 8080.
+            {t('serverError')}
           </div>
         )}
 
         {status === 'ok' && sessions.length === 0 && (
           <div className="admin-empty">
             <div className="admin-empty-icon">📭</div>
-            <p>Активних квіз-кімнат немає</p>
-            <a href="#/create" className="btn-primary-small">Створити квіз</a>
+            <p>{t('noRooms')}</p>
+            <a href="#/create" className="btn-primary-small">{t('createQuiz')}</a>
           </div>
         )}
 
@@ -202,11 +213,20 @@ export default function AdminPanel() {
                     <button
                       className={`copy-btn ${copiedCode === session.roomCode ? 'copied' : ''}`}
                       onClick={() => copyCode(session.roomCode)}
-                      title="Копіювати код"
+                      title="Copy code"
                     >
-                      {copiedCode === session.roomCode ? '✓ Скопійовано' : '📋 Копіювати'}
+                      {copiedCode === session.roomCode ? t('copied') : t('copyCode')}
                     </button>
                   </div>
+
+                  {/* QR code */}
+                  <img
+                    src={`/api/qr/${session.roomCode}`}
+                    alt={`QR ${session.roomCode}`}
+                    className="session-qr"
+                    width={80}
+                    height={80}
+                  />
 
                   {/* Назва квізу */}
                   <div className="session-title">{session.title}</div>
@@ -220,7 +240,7 @@ export default function AdminPanel() {
                       {stateInfo.label}
                     </span>
                     <span className="session-players">
-                      👥 {session.playerCount} гравців
+                      👥 {session.playerCount}
                     </span>
                   </div>
                 </div>

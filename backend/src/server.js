@@ -21,6 +21,9 @@ const { Server: SocketIOServer } = require('socket.io');
 const cors = require('cors');
 const { loadConfig, log } = require('./utils');
 const QuizRoomManager = require('./websocket-handler-auto');
+const db = require('./db');
+const { loadAllQuizzes } = require('./quiz-storage');
+const qrcode = require('qrcode');
 
 class QuizServer {
   /**
@@ -114,6 +117,39 @@ class QuizServer {
     this.app.get('/api/active-quizzes', (req, res) => {
       const sessions = this.roomManager.getActiveSessions();
       res.json({ success: true, sessions });
+    });
+
+    // API: статистика завершених сесій (з SQLite)
+    this.app.get('/api/stats', (req, res) => {
+      const stats = db.getStats();
+      res.json({ success: true, ...stats });
+    });
+
+    // API: результати конкретної сесії
+    this.app.get('/api/stats/session/:id', (req, res) => {
+      const results = db.getSessionResults(Number(req.params.id));
+      res.json({ success: true, results });
+    });
+
+    // API: список квізів з диску (папка quizzes/)
+    this.app.get('/api/quizzes', (req, res) => {
+      const quizzes = loadAllQuizzes();
+      res.json({ success: true, quizzes });
+    });
+
+    // API: QR-код для підключення до кімнати
+    this.app.get('/api/qr/:roomCode', async (req, res) => {
+      try {
+        const { roomCode } = req.params;
+        const localIP = this.getLocalIP();
+        const port = this.config.server.port;
+        const url = `http://${localIP}:${port}/?room=${roomCode.toUpperCase()}`;
+        const buffer = await qrcode.toBuffer(url, { type: 'png', width: 256 });
+        res.set('Content-Type', 'image/png');
+        res.send(buffer);
+      } catch (err) {
+        res.status(500).json({ success: false, error: 'QR generation failed' });
+      }
     });
 
     // Catch-all маршрут для SPA (Single Page Application)

@@ -12,6 +12,7 @@ import ReactDOM from 'react-dom/client';
 import PlayerView from './components/PlayerView.jsx';
 import AdminPanel from './components/AdminPanel.jsx';
 import QuizCreator from './components/QuizCreator.jsx';
+import StatsPanel from './components/StatsPanel.jsx';
 import './styles/theme.css';
 
 /**
@@ -43,6 +44,7 @@ function App() {
   // Рендеримо відповідний компонент за маршрутом
   if (route === '/admin') return <AdminPanel />;
   if (route === '/create') return <QuizCreator />;
+  if (route === '/stats') return <StatsPanel />;
   return <PlayerView />;
 }
 

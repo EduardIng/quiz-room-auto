@@ -12,6 +12,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import useLang from '../utils/useLang.js';
 import './QuizCreator.css';
 
 // URL бекенду
@@ -26,6 +27,8 @@ const EMPTY_QUESTION = () => ({
 });
 
 export default function QuizCreator() {
+  const [t, lang, setLang] = useLang();
+
   // ── Стан квізу ──
   const [title, setTitle] = useState('');
   const [questions, setQuestions] = useState([EMPTY_QUESTION()]);
@@ -43,6 +46,12 @@ export default function QuizCreator() {
 
   // Socket.IO ref (підключаємо лише при потребі)
   const socketRef = useRef(null);
+
+  // Import / library refs and state
+  const fileInputRef = useRef(null);
+  const [importError, setImportError] = useState('');
+  const [libraryQuizzes, setLibraryQuizzes] = useState(null); // null = not loaded
+  const [showLibrary, setShowLibrary] = useState(false);
 
   // ─────────────────────────────────────────────
   // УПРАВЛІННЯ ПИТАННЯМИ
@@ -265,6 +274,74 @@ export default function QuizCreator() {
   }, [title, questions]);
 
   // ─────────────────────────────────────────────
+  // IMPORT / LIBRARY
+  // ─────────────────────────────────────────────
+
+  /**
+   * Handles JSON file import — reads file, validates, populates state
+   */
+  const handleImportFile = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError('');
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const quiz = JSON.parse(evt.target.result);
+        if (!quiz.title || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+          setImportError('Invalid quiz JSON: missing title or questions');
+          return;
+        }
+        setTitle(quiz.title);
+        setQuestions(quiz.questions.map(q => ({
+          question: q.question || '',
+          answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
+          correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+          timeLimit: q.timeLimit ? String(q.timeLimit) : ''
+        })));
+        setActiveQuestion(0);
+      } catch {
+        setImportError('Could not parse JSON file');
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input so same file can be re-imported
+    e.target.value = '';
+  }, []);
+
+  /**
+   * Loads quiz list from /api/quizzes
+   */
+  const handleLoadLibrary = useCallback(async () => {
+    if (showLibrary) { setShowLibrary(false); return; }
+    try {
+      const res = await fetch('/api/quizzes');
+      const data = await res.json();
+      setLibraryQuizzes(data.quizzes || []);
+      setShowLibrary(true);
+    } catch {
+      setImportError('Could not load quiz library');
+    }
+  }, [showLibrary]);
+
+  /**
+   * Populates editor from a library quiz
+   */
+  const handleSelectLibraryQuiz = useCallback((quiz) => {
+    setTitle(quiz.title);
+    setQuestions(quiz.questions.map(q => ({
+      question: q.question || '',
+      answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
+      correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+      timeLimit: q.timeLimit ? String(q.timeLimit) : ''
+    })));
+    setActiveQuestion(0);
+    setShowLibrary(false);
+    setImportError('');
+  }, []);
+
+  // ─────────────────────────────────────────────
   // РЕНДЕР
   // ─────────────────────────────────────────────
 
@@ -278,21 +355,29 @@ export default function QuizCreator() {
       <div className="creator-page">
         <div className="creator-success">
           <div className="success-icon">🎉</div>
-          <h2>Кімнату створено!</h2>
-          <p className="success-subtitle">Поділись кодом з гравцями</p>
+          <h2>{t('roomCreated')}</h2>
+          <p className="success-subtitle">{t('shareCode')}</p>
 
           <div className="room-code-display">{roomCode}</div>
 
+          <img
+            src={`/api/qr/${roomCode}`}
+            alt={`QR ${roomCode}`}
+            className="success-qr"
+            width={160}
+            height={160}
+          />
+
           <p className="success-info">
-            Гравці підключаються на:{' '}
+            {t('playersConnect')}{' '}
             <strong>
               {window.location.protocol}//{window.location.hostname}:{window.location.port || 8080}
             </strong>
           </p>
 
           <div className="success-actions">
-            <a href="/" className="btn-outlined">👤 Відкрити як гравець</a>
-            <button className="btn-primary-creator" onClick={handleReset}>+ Новий квіз</button>
+            <a href="/" className="btn-outlined">{t('openAsPlayer')}</a>
+            <button className="btn-primary-creator" onClick={handleReset}>{t('newQuizBtn')}</button>
           </div>
         </div>
       </div>
@@ -301,12 +386,28 @@ export default function QuizCreator() {
 
   return (
     <div className="creator-page">
+      {/* Hidden file input for JSON import */}
+      <input
+        type="file"
+        accept=".json"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={handleImportFile}
+      />
+
       {/* ── Хедер ── */}
       <header className="creator-header">
-        <h1 className="creator-title">✏️ Створити квіз</h1>
+        <h1 className="creator-title">{t('createQuizTitle')}</h1>
         <div className="creator-header-right">
+          <button
+            className="lang-toggle-creator"
+            onClick={() => setLang(lang === 'uk' ? 'en' : 'uk')}
+            title="Switch language"
+          >
+            {lang === 'uk' ? '🇬🇧 EN' : '🇺🇦 UK'}
+          </button>
           <a href="#/admin" className="admin-link">🖥️ Admin</a>
-          <a href="/" className="admin-link">👤 Гравець</a>
+          <a href="/" className="admin-link">👤 {t('playerLink')}</a>
         </div>
       </header>
 
@@ -315,11 +416,11 @@ export default function QuizCreator() {
         <aside className="creator-sidebar">
           {/* Назва квізу */}
           <div className="sidebar-section">
-            <label className="field-label">Назва квізу</label>
+            <label className="field-label">{t('quizTitle')}</label>
             <input
               className="creator-input"
               type="text"
-              placeholder="Наприклад: П'ятниця — Quiz Night"
+              placeholder={t('quizTitlePlaceholder')}
               value={title}
               onChange={e => setTitle(e.target.value)}
               maxLength={80}
@@ -328,7 +429,7 @@ export default function QuizCreator() {
 
           {/* Список питань */}
           <div className="sidebar-section">
-            <label className="field-label">Питання ({questions.length})</label>
+            <label className="field-label">{t('questionsList')} ({questions.length})</label>
             <div className="questions-list">
               {questions.map((q, i) => (
                 <button
@@ -338,7 +439,7 @@ export default function QuizCreator() {
                 >
                   <span className="q-number">#{i + 1}</span>
                   <span className="q-preview">
-                    {q.question.trim() || 'Без тексту...'}
+                    {q.question.trim() || t('noText')}
                   </span>
                   {questions.length > 1 && (
                     <button
@@ -351,31 +452,31 @@ export default function QuizCreator() {
               ))}
             </div>
             <button className="add-question-btn" onClick={addQuestion}>
-              + Додати питання
+              {t('addQuestion')}
             </button>
           </div>
 
           {/* Налаштування гри */}
           <div className="sidebar-section">
-            <label className="field-label">Налаштування</label>
+            <label className="field-label">{t('settings')}</label>
             <div className="settings-grid">
               <div className="setting-item">
-                <label>Час на питання</label>
+                <label>{t('questionTime')}</label>
                 <select
                   className="creator-select"
                   value={questionTime}
                   onChange={e => setQuestionTime(Number(e.target.value))}
                 >
-                  <option value={10}>10 сек</option>
-                  <option value={15}>15 сек</option>
-                  <option value={20}>20 сек</option>
-                  <option value={30}>30 сек</option>
-                  <option value={45}>45 сек</option>
-                  <option value={60}>60 сек</option>
+                  <option value={10}>10 {t('sec')}</option>
+                  <option value={15}>15 {t('sec')}</option>
+                  <option value={20}>20 {t('sec')}</option>
+                  <option value={30}>30 {t('sec')}</option>
+                  <option value={45}>45 {t('sec')}</option>
+                  <option value={60}>60 {t('sec')}</option>
                 </select>
               </div>
               <div className="setting-item">
-                <label>Мін. гравців</label>
+                <label>{t('minPlayers')}</label>
                 <select
                   className="creator-select"
                   value={minPlayers}
@@ -393,7 +494,7 @@ export default function QuizCreator() {
                     checked={autoStart}
                     onChange={e => setAutoStart(e.target.checked)}
                   />
-                  Автостарт при досягненні мін. гравців
+                  {t('autoStart')}
                 </label>
               </div>
             </div>
@@ -409,10 +510,10 @@ export default function QuizCreator() {
 
             {/* Текст питання */}
             <div className="field-group">
-              <label className="field-label">Текст питання</label>
+              <label className="field-label">{t('questionText')}</label>
               <textarea
                 className="creator-textarea"
-                placeholder="Введіть питання..."
+                placeholder={t('questionPlaceholder')}
                 value={currentQ.question}
                 onChange={e => updateQuestionText(activeQuestion, e.target.value)}
                 rows={3}
@@ -422,7 +523,7 @@ export default function QuizCreator() {
 
             {/* Варіанти відповідей */}
             <div className="field-group">
-              <label className="field-label">Варіанти відповідей</label>
+              <label className="field-label">{t('answers')}</label>
               <div className="answers-editor">
                 {currentQ.answers.map((ans, ai) => (
                   <div
@@ -450,14 +551,12 @@ export default function QuizCreator() {
                   </div>
                 ))}
               </div>
-              <p className="field-hint">
-                Натисни кнопку ліворуч щоб позначити правильну відповідь
-              </p>
+              <p className="field-hint">{t('answerHint')}</p>
             </div>
 
             {/* Індивідуальний таймер питання */}
             <div className="field-group field-group-inline">
-              <label className="field-label">Таймер цього питання (необов'язково)</label>
+              <label className="field-label">{t('timerOptional')}</label>
               <input
                 className="creator-input timer-input"
                 type="number"
@@ -472,6 +571,26 @@ export default function QuizCreator() {
 
           {/* Помилка */}
           {error && <div className="creator-error">{error}</div>}
+          {importError && <div className="creator-error">{importError}</div>}
+
+          {/* Library dropdown */}
+          {showLibrary && libraryQuizzes && (
+            <div className="library-dropdown">
+              {libraryQuizzes.length === 0
+                ? <div className="library-empty">No quizzes in library</div>
+                : libraryQuizzes.map(quiz => (
+                  <button
+                    key={quiz.id}
+                    className="library-item"
+                    onClick={() => handleSelectLibraryQuiz(quiz)}
+                  >
+                    <span className="library-title">{quiz.title}</span>
+                    <span className="library-count">{quiz.questions.length}Q</span>
+                  </button>
+                ))
+              }
+            </div>
+          )}
 
           {/* Кнопки дій */}
           <div className="creator-actions">
@@ -479,16 +598,30 @@ export default function QuizCreator() {
               className="btn-export"
               onClick={handleExportJSON}
               disabled={!title.trim() || questions.some(q => !q.question.trim())}
-              title="Завантажити як JSON для папки quizzes/"
+              title="Save as JSON"
             >
-              ⬇ Зберегти JSON
+              {t('saveJSON')}
+            </button>
+            <button
+              className="btn-import"
+              onClick={() => fileInputRef.current?.click()}
+              title="Import JSON file"
+            >
+              {t('importJSON')}
+            </button>
+            <button
+              className="btn-import"
+              onClick={handleLoadLibrary}
+              title="Load from quiz library"
+            >
+              {t('loadLibrary')}
             </button>
             <button
               className="btn-create-room"
               onClick={handleCreateRoom}
               disabled={isCreating}
             >
-              {isCreating ? '⏳ Створення...' : `🚀 Запустити квіз (${questions.length} питань)`}
+              {isCreating ? t('launching') : `${t('launchQuiz')} (${questions.length})`}
             </button>
           </div>
         </main>

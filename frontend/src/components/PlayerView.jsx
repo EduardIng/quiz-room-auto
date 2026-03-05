@@ -37,7 +37,10 @@ export default function PlayerView() {
 
   // ── Стан форми JOIN ──
   const [nickname, setNickname] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(() => {
+    // Pre-fill room code from URL query param ?room=XXXXXX
+    return new URLSearchParams(window.location.search).get('room') || '';
+  });
   const [joinError, setJoinError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 

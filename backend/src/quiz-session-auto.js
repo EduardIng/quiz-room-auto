@@ -21,7 +21,7 @@ class AutoQuizSession {
    * @param {Object} quizData - Дані квізу (title, questions)
    * @param {Object} settings - Налаштування таймерів та поведінки
    */
-  constructor(quizData, settings) {
+  constructor(quizData, settings, db = null) {
     // Дані квізу: назва, питання
     // Якщо shuffle увімкнено — перемішуємо копію масиву питань (не змінюємо оригінал)
     this.quizData = settings.shuffle
@@ -58,6 +58,15 @@ class AutoQuizSession {
 
     // Код кімнати (встановлюється через init())
     this.roomCode = null;
+
+    // SQLite database (optional, for persistent storage)
+    this.db = db;
+
+    // Час початку квізу (для збереження в БД)
+    this.startedAt = null;
+
+    // Накопичена статистика по питаннях (для збереження в БД)
+    this.collectedQuestionStats = [];
 
     log('Session', `Новий сеанс створено для квізу: "${quizData.title}"`);
   }
@@ -237,6 +246,7 @@ class AutoQuizSession {
     }
 
     this.gameState = 'STARTING';
+    this.startedAt = Date.now();
     log('Session', `Квіз "${this.quizData.title}" починається! Відлік 3 секунди...`);
 
     // Відправляємо сигнал початку з відліком
@@ -357,6 +367,9 @@ class AutoQuizSession {
     // Обчислюємо статистику відповідей (скільки гравців обрали кожен варіант)
     const statistics = this._calculateAnswerStatistics(correctAnswerId);
 
+    // Зберігаємо статистику питання для БД
+    this.collectedQuestionStats.push(statistics);
+
     // Відправляємо результат питання всім гравцям
     this.broadcast({
       type: 'REVEAL_ANSWER',
@@ -450,6 +463,19 @@ class AutoQuizSession {
       finalLeaderboard,
       totalQuestions: this.quizData.questions.length
     });
+
+    // Persist session to SQLite if db is available
+    if (this.db && this.startedAt) {
+      this.db.saveSession(
+        this.roomCode,
+        this.quizData.title,
+        this.startedAt,
+        Date.now(),
+        this.quizData.questions.length,
+        finalLeaderboard,
+        this.collectedQuestionStats
+      );
+    }
   }
 
   // ─────────────────────────────────────────────
