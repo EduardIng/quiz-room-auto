@@ -10,10 +10,11 @@ How to run quiz sessions from start to finish.
 1. Host starts server   →  npm start
 2. Host opens browser   →  http://localhost:8080#/create
 3. Host creates room    →  Quiz Creator UI → Launch Quiz → room code + QR appear
-4. Players join         →  scan QR code OR open app and type room code + nickname
-5. Game runs itself     →  automatic questions, timers, reveals, leaderboard
-6. Quiz ends            →  final standings shown to everyone, results saved to DB
-7. View history         →  http://localhost:8080#/stats
+4. (Optional) Open projector view on TV  →  #/screen?room=CODE
+5. Players join         →  scan QR code OR open app and type room code + nickname
+6. Game runs itself     →  automatic questions, timers, reveals, leaderboard
+7. Quiz ends            →  final standings shown to everyone, results saved to DB
+8. View history         →  http://localhost:8080#/stats
 ```
 
 ---
@@ -27,6 +28,7 @@ How to run quiz sessions from start to finish.
 | `http://localhost:8080#/create` | Host | Create and launch a quiz |
 | `http://localhost:8080#/admin` | Host | Monitor all active rooms live |
 | `http://localhost:8080#/stats` | Host | View completed session history |
+| `http://localhost:8080#/screen?room=AB3C7D` | Projector/TV | Read-only big-screen view |
 
 ---
 
@@ -69,7 +71,84 @@ Click **🚀 Launch Quiz**. On success you'll see:
 
 ### Step 6 — Save for later (optional)
 
-Click **⬇ Save JSON** at any point to download the quiz as a file. Drop it in `quizzes/` to make it available in the library.
+- **⬇ Save JSON** — download the quiz as a `.json` file to your computer
+- **💾 Save to library** — upload the quiz directly to the server's `quizzes/` folder; it will appear in "Load from library" on any future session
+
+---
+
+## Category Mode
+
+Category mode replaces the standard linear question list with **rounds**. Each round offers two category choices, and a designated player picks one — the corresponding question is then asked.
+
+### Building a category mode quiz
+
+In the Quiz Creator, enable **Category mode** (toggle above the question list). The editor switches to a round-based view:
+
+- Each round has **two options**, each with a category name and a full question
+- Add rounds with **+ Add round**
+- Each option has the same fields as a standard question (text, 4 answers, correct answer, optional image/audio/time limit)
+
+### During the game
+
+- Before each round, one player is shown two category buttons and asked to pick
+- The chooser rotates every round so every player gets a turn
+- If the chooser doesn't pick within the time limit, a category is selected randomly
+- All other players see the category options but cannot choose
+- After a choice is made, the selected question is shown normally
+
+### Player screens (category mode additions)
+
+| Screen | What the player sees |
+|--------|---------------------|
+| CATEGORY_SELECT (chooser) | Two category buttons to pick from + countdown |
+| CATEGORY_SELECT (others) | Waiting screen showing the chooser's name and options |
+| CATEGORY_CHOSEN | Brief flash showing the chosen category before the question |
+
+---
+
+## Projector View
+
+The projector view is a **read-only display** designed for a TV or large screen visible to all players. It does not count as a player and does not affect game logic.
+
+### Opening the projector view
+
+After launching a quiz, the creator success screen shows a **Projector View** link. Click it to open in a new tab, or open manually:
+
+```
+http://localhost:8080#/screen?room=AB3C7D
+```
+
+Display on a second screen (TV, projector) via screen mirroring or a second browser window.
+
+### What it shows
+
+- **WAITING** — room code in large text + QR code for players to scan
+- **QUESTION** — full question text + 4 answer options + animated timer bar (turns red in the last 5 seconds)
+- **ANSWER_REVEAL** — correct answer highlighted + answer distribution statistics
+- **LEADERBOARD** — ranked list with position, nickname, and score (top 3 medals)
+- **CATEGORY_SELECT** — both category options + chooser name + countdown
+- **PAUSED** — translucent overlay with "⏸ Paused" message
+- **ENDED** — final podium
+
+The projector view stays in sync automatically. If the page is loaded mid-game, it requests the current game state and renders it immediately.
+
+---
+
+## Host Controls
+
+After launching a quiz, the creator success screen shows a **Host Controls** panel. These controls send commands to the live session.
+
+| Button | When available | Effect |
+|--------|---------------|--------|
+| ▶ Start | WAITING state | Force-starts the quiz (skips autostart wait) |
+| ⏸ Pause | QUESTION state | Freezes the question timer |
+| ▶ Resume | QUESTION state (paused) | Resumes the question timer from where it stopped |
+| ⏭ Skip | QUESTION / ANSWER_REVEAL / LEADERBOARD | Advances to the next phase immediately |
+
+**Skip behaviour:**
+- From `QUESTION` → shows the answer reveal immediately
+- From `ANSWER_REVEAL` → jumps to the leaderboard
+- From `LEADERBOARD` → goes to the next question (or ends the game if it was the last)
 
 ---
 
@@ -106,6 +185,7 @@ Shows all active rooms in real time (polls every 2 seconds):
 - Room code, quiz title, current game state, player count
 - QR code for each room (80px) — point a camera at it to join instantly
 - Copy-to-clipboard button for the room code
+- **Projector View** link — opens the big-screen display for that room in a new tab
 - Link to the statistics dashboard
 
 ---
@@ -170,6 +250,10 @@ socket.on('quiz-update', (data) => {
     case 'REVEAL_ANSWER':    // Show correct answer + scores
     case 'SHOW_LEADERBOARD': // Rankings between questions
     case 'QUIZ_ENDED':       // Final results
+    case 'CATEGORY_SELECT':  // (category mode) player must pick a category
+    case 'CATEGORY_CHOSEN':  // (category mode) category was selected
+    case 'GAME_PAUSED':      // Host paused the timer
+    case 'GAME_RESUMED':     // Host resumed the timer
   }
 });
 ```
@@ -229,12 +313,15 @@ curl http://localhost:8080/api/qr/AB3C7D --output qr.png
 
 ## Tips for Live Events
 
-- **Show the QR code on a projector** — players can scan without typing anything
+- **Open the projector view on the big screen** before players arrive — the room code and QR code are shown on the waiting screen so players can join by scanning
 - **Use `/?room=CODE` links** — pre-fill the room code in shared links or on printed cards
 - **Set `questionTime: 20`** for fast-paced games; `30` for harder questions
 - **Set `minPlayers: 2`** so the game doesn't auto-start before enough people join
 - **Use `waitForAllPlayers: true`** so fast players don't wait once everyone has answered
+- **Use Pause** if something interrupts the venue mid-question — the timer freezes and resumes exactly where it left off
+- **Use Skip** to jump over a question that has a problem, or to speed up the show
 - **Check `#/stats` after each night** — full session history is saved automatically
 - **Run on a wired ethernet connection** for the host machine — Wi-Fi is fine for players
-- **For image questions**, use direct image URLs (Imgur, Wikimedia Commons, or your own server) — the image appears above the question text on every player's screen
+- **For image questions**, use direct image URLs (Imgur, Wikimedia Commons, or your own server) — the image appears above the question text on every player's screen and on the projector
 - **For music questions**, ask players to tap the screen once before the quiz starts to avoid browser autoplay blocks; the 🎵 Replay button lets anyone manually start the audio if it was blocked
+- **For category mode**, brief the chooser before the event — they may not have used it before; the UI shows a countdown so they know how much time they have

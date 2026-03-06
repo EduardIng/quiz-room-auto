@@ -2,7 +2,7 @@
 
 > Automated quiz room system for commercial venues — no host required after setup
 
-[![Tests](https://img.shields.io/badge/tests-66%20passed-brightgreen)](backend/tests/)
+[![Tests](https://img.shields.io/badge/tests-100%20passed-brightgreen)](backend/tests/)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -16,8 +16,11 @@ Phase 4: Documentation       [██████████] 100% ✅
 Phase 5: Optional Features   [██████████] 100% ✅
 Phase 6: Extended Features   [██████████] 100% ✅
 Phase 7: Rich Media          [██████████] 100% ✅
+Phase 8: Category Mode       [██████████] 100% ✅
+Phase 9: Quiz Library        [██████████] 100% ✅
+Phase 10: Projector & Host   [██████████] 100% ✅
 ```
-Last Updated: 2026-03-05
+Last Updated: 2026-03-07
 
 ---
 
@@ -39,14 +42,20 @@ Last Updated: 2026-03-05
 - **Browser-based** — players join on any phone or tablet, no app install required
 - **QR codes** — scan to join; shown on the admin panel and creator success screen
 - **Quiz creator UI** — build quizzes in the browser, import/export JSON, load from library
+- **Quiz library** — save quizzes to the server `quizzes/` folder and reload them any time
+- **Category mode** — each round a designated player picks a category (two options), then answers; chooser rotates each round
+- **Projector view** — read-only big-screen display for TV/projector (`#/screen`), syncs live state without counting as a player
+- **Host controls** — pause/resume question timer, skip current phase, or force-start from the creator UI
 - **Statistics dashboard** — persistent history of all sessions with per-session leaderboards
 - **Multi-language** — Ukrainian and English UI (toggle in every view)
 - **Sound effects** — correct, wrong, timeout, countdown, finish
-- **Admin panel** — live monitoring of all active rooms with real-time player counts
+- **Admin panel** — live monitoring of all active rooms with QR codes and projector links
 - **Configurable timers** — per-quiz and per-question time limits
 - **Image questions** — optional image displayed above question text (URL-based)
 - **Music questions** — optional audio auto-plays on question start, with replay button
 - **Drag-to-reorder** — drag questions into position in the Quiz Creator
+- **Rate limiting** — max 10 answer submissions per socket per 30 seconds
+- **Auto DB cleanup** — sessions older than 90 days are removed from SQLite on startup
 
 ---
 
@@ -91,6 +100,7 @@ Or scan the QR code shown after creating a room — it encodes the join URL auto
 | `#/create` | Quiz creator — build, import, or load from library |
 | `#/admin` | Admin panel — live session monitor with QR codes |
 | `#/stats` | Statistics dashboard — completed session history |
+| `#/screen?room=CODE` | Projector view — read-only big-screen display for TV/projector |
 
 ---
 
@@ -117,7 +127,7 @@ Or scan the QR code shown after creating a room — it encodes the join URL auto
 | Frontend | React 18, Vite 4 |
 | Real-time | WebSocket (Socket.IO) |
 | QR codes | qrcode (server-side PNG generation) |
-| Testing | Jest 29 (66 tests) |
+| Testing | Jest 29 (100 tests) |
 
 ---
 
@@ -134,14 +144,15 @@ quiz-room-auto/
 │   │   ├── db.js                      # SQLite persistence (sessions, results)
 │   │   └── utils.js                   # Config loader, logging
 │   └── tests/
-│       ├── session.test.js            # 44 unit tests
-│       └── websocket.test.js          # 22 unit tests
+│       ├── session.test.js            # 70 unit tests
+│       └── websocket.test.js          # 30 unit tests
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── PlayerView.jsx         # 7-screen player UI
 │   │   │   ├── AdminPanel.jsx         # Live session monitor
-│   │   │   ├── QuizCreator.jsx        # Quiz builder + import
+│   │   │   ├── QuizCreator.jsx        # Quiz builder + import + host controls
+│   │   │   ├── ProjectorView.jsx      # Read-only big-screen display
 │   │   │   └── StatsPanel.jsx         # Session history dashboard
 │   │   ├── utils/
 │   │   │   ├── i18n.js                # UK/EN translations
@@ -190,7 +201,7 @@ Edit `config.json` to change game behaviour:
 npm test
 ```
 
-Output: `66 passed, 0 failed`
+Output: `100 passed, 0 failed`
 
 ---
 

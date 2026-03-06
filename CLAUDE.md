@@ -23,6 +23,48 @@
 
 ---
 
+## ✅ PERMANENT PERMISSIONS (updated 7 March 2026)
+
+All of the following are **pre-authorized and require zero confirmation**:
+
+- `git commit`, `git push`, `git push --tags`, `git tag`
+- Creating, editing, or deleting any file in this project
+- `npm install`, `npm run build`, `npm test`
+- Starting new features, phases, or refactors autonomously
+- Updating PROGRESS.md, CLAUDE.md, and memory files at `/Users/einhorn/.claude/projects/…/memory/`
+- Making architectural and implementation decisions using best judgment
+- Choosing between libraries, patterns, or approaches without asking
+
+**Only stop and check with the user when:**
+1. **Product ambiguity** — the requirement is genuinely unclear (not *how* to build, but *what* to build). Example: "should the projector show category options or hide them from the screen?" — this is a product decision only the user can make.
+2. **Breaking change to stored data** — a migration would alter or destroy data in `sessions.db` or `quizzes/` in a way that cannot be reversed.
+3. **Breaking API contract** — a change would require all connected clients (player phones) to reload/update simultaneously, making an in-progress live event fail.
+4. **External paid service** — any action that calls a paid third-party API, sends email/SMS, or requires credentials not already in the project.
+5. **Force-destructive git** — `git push --force` to `main`, `git reset --hard` on pushed commits, or deleting remote branches.
+6. **Scope is genuinely unclear** — a task description is so broad that multiple incompatible interpretations exist. In this case: state the interpretations, pick the most commercially sensible one, and proceed — only stop if proceeding either way would cause problem 2 or 3.
+
+**When multiple valid technical solutions exist:** Do NOT ask. Instead:
+- Run a silent internal assessment of long-term impact (see section below)
+- Pick the best option
+- Note the decision and rationale in a single sentence in the commit message or PROGRESS.md
+
+---
+
+## 🏗 ARCHITECTURE ASSESSMENT (for commercial product)
+
+This is a **commercial system** used at live events. When choosing among implementations, always evaluate against these criteria in order:
+
+1. **Live-event safety** — does this change risk breaking an in-progress game? Prefer additive changes over modifications to the state machine core.
+2. **Backwards compatibility** — new quiz JSON fields must be optional with sensible defaults so existing `quizzes/*.json` files keep working without modification.
+3. **Scalability headroom** — prefer solutions that work for 2 players and for 50 players without rewriting. Avoid hardcoded limits or O(n²) loops over player lists.
+4. **Operability** — the host is a non-technical user. Prefer approaches that require zero config changes, zero server restarts, and zero manual steps to use a new feature.
+5. **Testability** — pure functions and isolated modules over tightly coupled code. Every new server-side behaviour should be unit-testable without running a real socket.
+6. **Maintainability** — future Claude sessions must be able to understand the code from comments alone. Ukrainian comments, clear state machine transitions, no magic numbers.
+
+When these criteria conflict, **live-event safety > backwards compatibility > scalability > the rest**.
+
+---
+
 ## 🚨 CRITICAL RULES
 
 ### Communication Language
@@ -33,18 +75,15 @@
 - **Technical terms:** Explain in Ukrainian first time, then use with explanation in parentheses
 
 ### Automation Level
-- **Fully automatic** - proceed without asking EXCEPT:
-  - ❓ When uncertain about implementation approach
-  - ❓ Before starting each new Phase
-  - ❓ When encountering errors that cannot be auto-resolved
-  - ❓ When multiple valid solutions exist
+- **Fully automatic** — proceed without asking. See PERMANENT PERMISSIONS above for the exact list of when to stop.
+- When multiple solutions exist: assess silently using the ARCHITECTURE ASSESSMENT criteria, pick the best, proceed.
+- Never ask "should I continue?" or "shall I proceed?" between steps of an agreed task.
 
-### Before Asking User
+### Before Asking User (when genuinely required by the stop conditions above)
 **ALWAYS provide:**
 1. Clear explanation of the situation (Ukrainian)
-2. Suggested solution(s) with pros/cons
-3. What you recommend and why
-4. Option to proceed with recommendation or choose alternative
+2. Exactly what decision only the user can make
+3. Your recommended default if the user says nothing within the session
 
 **Example:**
 ```

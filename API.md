@@ -35,7 +35,7 @@ Callback format:
 
 Creates a new quiz room. Called by the quiz host.
 
-**Request:**
+**Standard mode request:**
 ```javascript
 socket.emit('create-quiz', {
   quizData: {
@@ -69,11 +69,43 @@ socket.emit('create-quiz', {
 });
 ```
 
+**Category mode request:**
+```javascript
+socket.emit('create-quiz', {
+  quizData: {
+    title: string,
+    categoryMode: true,       // Enables category selection between rounds
+    rounds: [
+      {
+        options: [
+          {
+            category: string,     // e.g. "Geography"
+            question: string,
+            answers: [string, string, string, string],
+            correctAnswer: number,  // 0–3
+            timeLimit?: number,
+            image?: string,
+            audio?: string
+          },
+          {
+            category: string,     // second option
+            // ... same fields
+          }
+        ]
+      }
+      // ... more rounds
+    ]
+  },
+  settings: { /* same as standard */ }
+}, callback);
+```
+
 **Validation errors:**
-- Missing `quizData` or `questions`
-- Empty questions array
+- Missing `quizData` or `questions` (standard) / `rounds` (category mode)
+- Empty questions/rounds array
 - Any question does not have exactly 4 answers
 - `correctAnswer` is not 0–3
+- Category mode: missing `category` name or `question` text in any option
 
 ---
 
@@ -125,6 +157,80 @@ socket.emit('submit-answer', {
 - Socket not in any room
 - Player already answered this question
 - `answerId` is not 0–3
+
+**Rate limiting:** Maximum 10 `submit-answer` events per socket per 30 seconds. Exceeding this returns `{ success: false, error: "..." }`.
+
+---
+
+### `submit-category`
+
+Submits the category choice during Category Mode. Only the designated chooser can submit; other players' submissions are rejected.
+
+**Request:**
+```javascript
+socket.emit('submit-category', {
+  choiceIndex: number   // 0 or 1 (index into the options array)
+}, (response) => {
+  // response.success: boolean
+  // response.error?: string
+});
+```
+
+**Validation errors:**
+- State is not `CATEGORY_SELECT`
+- Socket is not the current chooser
+- `choiceIndex` is not 0 or 1
+
+---
+
+### `watch-room`
+
+Connects as a **read-only observer** (e.g. Projector View). The socket joins the room's broadcast channel but is not registered as a player — it does not affect autostart, player count, or answer evaluation.
+
+**Request:**
+```javascript
+socket.emit('watch-room', {
+  roomCode: string   // 6-char room code
+}, (response) => {
+  // response.success: boolean
+  // response.gameState: GameState  (full extended state for initial sync)
+  // response.error?: string
+});
+```
+
+After connecting, the observer receives all `quiz-update` broadcasts in real time.
+
+**Validation errors:**
+- Room code not found
+
+---
+
+### `host-control`
+
+Sends a control command to the active session. Only the socket that created the room (the host) can send this event.
+
+**Request:**
+```javascript
+socket.emit('host-control', {
+  roomCode: string,
+  action: 'pause' | 'resume' | 'skip' | 'start'
+}, (response) => {
+  // response.success: boolean
+  // response.error?: string
+});
+```
+
+| Action | Effect |
+|--------|--------|
+| `start` | Force-starts the quiz from `WAITING` state |
+| `pause` | Pauses the question timer; broadcasts `GAME_PAUSED` |
+| `resume` | Resumes the question timer; broadcasts `GAME_RESUMED` |
+| `skip` | Advances the game: QUESTION→reveal, ANSWER_REVEAL→leaderboard, LEADERBOARD→next question or end |
+
+**Validation errors:**
+- Room code not found
+- Socket is not the host of that room
+- Unknown action
 
 ---
 
@@ -318,6 +424,75 @@ Broadcast after the final leaderboard display.
 
 ---
 
+### `quiz-update` — Type: `CATEGORY_SELECT`
+
+**Category mode only.** Broadcast when a new round begins and a player must choose the question category.
+
+```javascript
+{
+  type: 'CATEGORY_SELECT',
+  chooserNickname: string,   // Nickname of the player who picks
+  options: [
+    { index: 0, category: string },
+    { index: 1, category: string }
+  ],
+  roundIndex: number,        // 1-based round number
+  totalRounds: number,
+  timeLimit: number          // Seconds available to choose (from config)
+}
+```
+
+If the chooser does not submit within `timeLimit` seconds, the server auto-selects randomly and sets `wasTimeout: true` in the follow-up event.
+
+---
+
+### `quiz-update` — Type: `CATEGORY_CHOSEN`
+
+**Category mode only.** Broadcast immediately after a category is selected (by player or timeout), before the question appears.
+
+```javascript
+{
+  type: 'CATEGORY_CHOSEN',
+  category: string,    // The chosen category name
+  choiceIndex: number, // 0 or 1
+  wasTimeout: boolean  // true = auto-selected because timer expired
+}
+```
+
+The question follows ~1 second later as a `NEW_QUESTION` event.
+
+---
+
+### `quiz-update` — Type: `GAME_PAUSED`
+
+Broadcast when the host pauses the question timer.
+
+```javascript
+{
+  type: 'GAME_PAUSED',
+  timeRemaining: number   // Whole seconds left on the question timer
+}
+```
+
+Only emitted when `gameState` is `QUESTION`. Has no effect if already paused.
+
+---
+
+### `quiz-update` — Type: `GAME_RESUMED`
+
+Broadcast when the host resumes the question timer after a pause.
+
+```javascript
+{
+  type: 'GAME_RESUMED',
+  timeRemaining: number   // Whole seconds remaining when resumed
+}
+```
+
+The question timer restarts from `timeRemaining`. Answer time for scoring is adjusted to exclude the paused duration.
+
+---
+
 ## HTTP Endpoints
 
 ### `GET /health`
@@ -375,6 +550,51 @@ List all quiz files found in the `quizzes/` directory. Used by the QuizCreator "
   ]
 }
 ```
+
+---
+
+### `POST /api/quizzes/save`
+
+Saves a quiz to the `quizzes/` directory. Used by the QuizCreator "Save to library" button.
+
+**Request body:**
+```json
+{
+  "title": "Friday Night Quiz",
+  "questions": [ /* full question objects */ ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "id": "friday-night-quiz",
+  "filename": "friday-night-quiz.json"
+}
+```
+
+The `id` is derived from the title (lowercased, spaces replaced with hyphens). If a file with the same name already exists it is overwritten.
+
+**Validation errors:**
+- Missing or empty `title`
+- Missing or empty `questions` array
+
+---
+
+### `DELETE /api/quizzes/:id`
+
+Deletes a quiz file from the `quizzes/` directory.
+
+**Parameters:**
+- `:id` — quiz ID as returned by `GET /api/quizzes` or `POST /api/quizzes/save`
+
+**Response:**
+```json
+{ "success": true }
+```
+
+Returns `{ "success": false, "error": "..." }` if the file does not exist.
 
 ---
 
@@ -454,9 +674,11 @@ Generates a QR code PNG image that encodes the player join URL for the given roo
 
 ## State Machine
 
+### Standard mode
+
 ```
 WAITING
-  └─→ STARTING      (autoStart + minPlayers reached, or manual)
+  └─→ STARTING         (autoStart + minPlayers reached, or host sends 'start')
         └─→ QUESTION         (after 3-second countdown)
               └─→ ANSWER_REVEAL   (timer expired OR all answered)
                     └─→ LEADERBOARD    (after answerRevealTime)
@@ -464,7 +686,22 @@ WAITING
                           └─→ ENDED          (if last question)
 ```
 
-**Valid game states:** `WAITING` · `STARTING` · `QUESTION` · `ANSWER_REVEAL` · `LEADERBOARD` · `ENDED`
+### Category mode
+
+```
+WAITING
+  └─→ STARTING
+        └─→ CATEGORY_SELECT   (chooser picks category; auto-resolves on timeout)
+              └─→ QUESTION         (1 second after CATEGORY_CHOSEN)
+                    └─→ ANSWER_REVEAL
+                          └─→ LEADERBOARD
+                                ├─→ CATEGORY_SELECT   (if more rounds remain)
+                                └─→ ENDED             (if last round)
+```
+
+**Valid game states:** `WAITING` · `STARTING` · `QUESTION` · `ANSWER_REVEAL` · `LEADERBOARD` · `ENDED` · `CATEGORY_SELECT`
+
+**Pause:** The `isPaused` flag can be set during `QUESTION` state. The game state string remains `QUESTION` while paused; the timer is simply suspended.
 
 ---
 
@@ -485,12 +722,25 @@ Wrong answer or no answer:
 ## TypeScript Types (reference)
 
 ```typescript
+// Returned by join-quiz, get-game-state, and watch-room
 interface GameState {
-  gameState: 'WAITING' | 'STARTING' | 'QUESTION' | 'ANSWER_REVEAL' | 'LEADERBOARD' | 'ENDED';
+  gameState: 'WAITING' | 'STARTING' | 'QUESTION' | 'ANSWER_REVEAL' | 'LEADERBOARD' | 'ENDED' | 'CATEGORY_SELECT';
   players: { nickname: string; score: number }[];
   totalQuestions: number;
   currentQuestionIndex: number;  // -1 before start, 0-based during game
   quizTitle: string;
+
+  // Extended fields — returned by watch-room and get-game-state for observer sync
+  isPaused?: boolean;
+  timeRemaining?: number;        // Seconds left on question timer (QUESTION state)
+  currentQuestion?: {            // Active question without correct answer
+    text: string;
+    answers: { id: number; text: string }[];
+    image?: string;
+    audio?: string;
+  };
+  correctAnswer?: number;        // 0–3, only present in ANSWER_REVEAL state
+  leaderboard?: LeaderboardEntry[];  // Present in LEADERBOARD and ENDED states
 }
 
 interface LeaderboardEntry {
@@ -499,7 +749,7 @@ interface LeaderboardEntry {
   score: number;
   correctAnswers: number;
   totalQuestions: number;
-  avgAnswerTime: number;
-  position: number;
+  avgAnswerTime: number;   // Seconds, rounded to 0.1
+  position: number;        // 1, 2, 3, ...
 }
 ```
