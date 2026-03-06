@@ -2,7 +2,7 @@
 
 > Цей файл є основою для перезапуску роботи з Claude Code.
 > Прочитай його повністю перед тим як продовжувати розробку.
-> Останнє оновлення: 6 березня 2026
+> Останнє оновлення: 6 березня 2026 (сесія 2)
 
 ---
 
@@ -15,9 +15,10 @@
 - **Розробник:** EduardIng
 - **Репозиторій:** https://github.com/EduardIng/quiz-room-auto
 - **Локальна папка:** `/Users/einhorn/quiz-room-auto`
-- **Версія:** v1.2.0 (остання тегована)
+- **Версія:** v1.3.0 (закомічено, не тегована)
 - **Тести:** 66/66 проходять ✅
 - **Збірка фронтенду:** успішна ✅
+- **Останній коміт:** `bf72b5d` — все закомічено і запушено на GitHub
 
 ---
 
@@ -59,7 +60,11 @@ quiz-room-auto/
 │   └── package.json
 ├── quizzes/
 │   ├── dummy-quiz-1.json              ← Тестовий квіз (стандартний)
-│   └── dummy-quiz-2.json              ← Тестовий квіз (стандартний)
+│   ├── dummy-quiz-2.json              ← Тестовий квіз (стандартний)
+│   └── first-try.json                 ← 30-раундовий category mode квіз (збережений через UI)
+├── quiz creation/
+│   ├── quiz-mega-pack.json            ← 60-раундовий category mode квіз (генерований)
+│   └── quiz-mega-pack-v2.json         ← Оновлена версія мега-паку
 ├── data/
 │   └── sessions.db                    ← SQLite база (створюється автоматично)
 ├── RESTART/
@@ -164,6 +169,45 @@ quiz-room-auto/
   - `GET /api/stats/session/:id` — деталі однієї сесії
   - `GET /api/qr/:roomCode` — QR код
 
+### Phase 9 — Quiz Library + Bug Fixes (6 березня 2026, сесія 2) ✅ ЗАКОМІЧЕНО
+
+**Quiz Library (збереження квізів на сервері):**
+
+`backend/src/quiz-storage.js`:
+- Виправлена `loadAllQuizzes()` — тепер приймає і category mode квізи (`rounds[]`), не тільки стандартні (`questions[]`)
+- Нова функція `saveQuiz(quizData)` — зберігає квіз як JSON файл у `quizzes/`, автоматично генерує назву файлу з title, додає суфікс `-2`, `-3`... якщо файл вже існує
+- Нова функція `deleteQuiz(quizId)` — видаляє файл з `quizzes/` (захист від path traversal)
+- Нова `titleToFilename()` — безпечна конвертація назви у ім'я файлу
+
+`backend/src/server.js`:
+- `POST /api/quizzes/save` — зберігає квіз з тіла запиту на диск, повертає `{ id, filename }`
+- `DELETE /api/quizzes/:id` — видаляє квіз з диску
+
+`frontend/src/components/QuizCreator.jsx`:
+- Новий стейт `saveSuccess` — зелене повідомлення після збереження
+- Нова функція `handleSaveToLibrary()` — POST поточного квізу на `/api/quizzes/save`
+- Нова функція `handleDeleteLibraryQuiz(e, quizId, quizTitle)` — DELETE з підтвердженням
+- Оновлений рендер бібліотеки: кожен елемент — рядок `.library-item-row` з кнопкою квізу і кнопкою ✕
+- Виправлено лічильник у бібліотеці: category mode показує `NR` (rounds), стандарт — `NQ` (questions)
+- Нова кнопка `💾 Зберегти в бібліотеку` в `.creator-actions`
+
+`frontend/src/components/QuizCreator.css`:
+- `.creator-save-success` — зелене повідомлення про успіх
+- `.btn-save-library` — стиль кнопки збереження (зелений відтінок)
+- `.library-item-row` — flex-рядок для елемента бібліотеки
+- `.library-delete-btn` — кнопка ✕ (червоніє при hover)
+
+`frontend/src/utils/i18n.js`:
+- Новий ключ `saveToLibrary`: `'💾 Зберегти в бібліотеку'` / `'💾 Save to library'`
+
+**Виправлення критичного бага — відповіді завжди помилкові:**
+
+`frontend/src/components/PlayerView.jsx`:
+- **Баг:** socket listener реєструвався один раз (`useEffect` з `[]`), захоплюючи `handleServerUpdate` з початковими значеннями `question=null` і `myNickname=''`. Кожен `REVEAL_ANSWER` викликав застарілий обробник — нікнейм не знаходився → `isCorrect=false`, текст відповіді був порожнім.
+- **Виправлення:** Доданий `handleServerUpdateRef = useRef(null)` — оновлюється після кожного рендеру через `useEffect(() => { handleServerUpdateRef.current = handleServerUpdate; })`. Socket listener тепер викликає `handleServerUpdateRef.current(data)` — завжди актуальна версія.
+- Доданий `questionRef = useRef(null)` — синхронізується при `setQuestion()`. `handleRevealAnswer` читає `questionRef.current` замість `question` зі стейлого closure.
+- `handleRevealAnswer` — видалено `question` з deps array (тепер читає через ref)
+
 ### Phase 7 — Медіа питання + UX покращення
 - **Image questions** — поле `"image": "url"` у питанні:
   - QuizCreator: поле вводу URL + живий превʼю мініатюри + бейдж 🖼
@@ -176,8 +220,7 @@ quiz-room-auto/
   - Іконка ⠿ як ручка для перетягування
   - Візуальний індикатор куди впаде питання
 
-### Phase 8 — Category Mode (ПОТОЧНА, 6 березня 2026)
-Це остання реалізована функція. **НЕ ЗАКОМІЧЕНА У GIT.**
+### Phase 8 — Category Mode (6 березня 2026) ✅ ЗАКОМІЧЕНО
 
 **Концепція:**
 - Новий режим гри де перед кожним питанням один гравець (по черзі в порядку приєднання) обирає між двома категоріями
@@ -259,14 +302,13 @@ quiz-room-auto/
 
 ---
 
-## ⚠️ Що НЕ зроблено після Phase 8 (Category Mode)
+## ⚠️ Що НЕ зроблено (залишається після Phase 9)
 
-1. **Не закомічено у Git** — зміни Category Mode є тільки у файлах, не в git history
-2. **Не оновлено документацію** — README, API.md, USAGE.md, SETUP.md не містять інформації про category mode
-3. **PROGRESS_LOG.md не оновлений** — старий лог-файл зупинився на Phase 7
-4. **Не додано тести** — для нових методів `startCategorySelect`, `submitCategory`, `_resolveCategory`
-5. **Не тегована нова версія** — остання теґ v1.2.0, category mode має бути v1.3.0
-6. **Немає Projector/Big Screen View** — `#/screen` сторінки для телевізора немає (обговорювалось але не реалізовано)
+1. **Не оновлено документацію** — README, API.md, USAGE.md, SETUP.md не містять інформації про category mode та quiz library
+2. **PROGRESS_LOG.md не оновлений** — старий лог-файл зупинився на Phase 7
+3. **Не додано тести** — для `startCategorySelect`, `submitCategory`, `_resolveCategory`, `saveQuiz`, `deleteQuiz`
+4. **Не тегована нова версія** — остання теґ v1.2.0, поточний код відповідає v1.3.0
+5. **Немає Projector/Big Screen View** — `#/screen` сторінки для телевізора немає (обговорювалось але не реалізовано)
 
 ---
 
@@ -303,7 +345,9 @@ quiz-room-auto/
 |-------|------|-------------|
 | GET | `/health` | `{ status: "ok", uptime, activeSessions }` |
 | GET | `/api/active-quizzes` | Список активних кімнат |
-| GET | `/api/quizzes` | Список квізів з папки quizzes/ |
+| GET | `/api/quizzes` | Список квізів з папки quizzes/ (стандартні + categoryMode) |
+| POST | `/api/quizzes/save` | Зберегти квіз на диск → `{ id, filename }` |
+| DELETE | `/api/quizzes/:id` | Видалити квіз з диску |
 | GET | `/api/stats` | Агрегована статистика + список сесій |
 | GET | `/api/stats/session/:id` | Деталі одної сесії |
 | GET | `/api/qr/:roomCode` | PNG QR-код (200x200) |
@@ -337,7 +381,7 @@ quiz-room-auto/
 | `v1.0.0` | Phase 0-5: базова система + shuffle + звуки + admin + creator |
 | `v1.1.0` | Phase 6: SQLite + QR + stats + i18n + import |
 | `v1.2.0` | Phase 7: image/audio питання + drag-to-reorder |
-| (не тегована) | Phase 8: Category Mode — є у файлах, не в git |
+| (не тегована) | Phase 8+9: Category Mode + Quiz Library + answer reveal bug fix — закомічено, не тегована |
 
 ---
 
@@ -369,16 +413,14 @@ quiz-room-auto/
 > "Прочитай CLAUDE.md і PROGRESS.md і продовжуй розробку. Ось що я хочу зробити: [завдання]"
 
 ### Рекомендований наступний крок
-Закомітити Category Mode і оновити документацію:
-```
-git add -A
-git commit -m "feat(phase-8): Add category selection mode"
-```
-Потім оновити: `API.md`, `USAGE.md`, `README.md`, `PROGRESS_LOG.md`, додати тести, тегувати `v1.3.0`.
+Все закомічено і запушено. Наступні пріоритети:
+1. Тегувати `v1.3.0`: `git tag -a v1.3.0 -m "Category Mode + Quiz Library" && git push --tags`
+2. Реалізувати **Projector/Big Screen View** (`#/screen`) — найбільший пріоритет нової функції
+3. Додати тести для Phase 8+9 методів
 
 ### Або — нова функція
 Найбільший пріоритет що ще не реалізований: **Projector/Big Screen View** (`#/screen`)
 
 ---
 
-*Цей файл оновлено 6 березня 2026 після завершення Phase 8 (Category Mode)*
+*Цей файл оновлено 6 березня 2026 (сесія 2) після завершення Phase 9 (Quiz Library + bug fixes)*
