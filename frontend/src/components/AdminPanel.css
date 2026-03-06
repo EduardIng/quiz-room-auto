@@ -238,6 +238,25 @@
   color: var(--color-text-muted);
 }
 
+/* Projector View link on session card */
+.session-projector-link {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 14px;
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 20px;
+  color: #a78bfa;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.session-projector-link:hover {
+  background: rgba(167, 139, 250, 0.2);
+}
+
 /* Маленька кнопка */
 .btn-primary-small {
   display: inline-block;

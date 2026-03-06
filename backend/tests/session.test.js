@@ -673,3 +673,285 @@ describe('AutoQuizSession — Відключення під час гри', () =
     expect(session.gameState).toBe('ANSWER_REVEAL');
   });
 });
+
+// ─────────────────────────────────────────────
+// ТЕСТИ: Phase 9 — Host Controls (pause/resume/skip/forceStart)
+// ─────────────────────────────────────────────
+
+describe('AutoQuizSession — Host Controls', () => {
+  test('pauseGame: встановлює isPaused=true та broadcast GAME_PAUSED', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'QUESTION';
+    session.currentQuestionIndex = 0;
+    session.questionStartTime = Date.now() - 10000;
+    session.currentTimerLimit = 30;
+
+    broadcasts.length = 0;
+    session.pauseGame();
+    clearSessionTimers(session);
+
+    expect(session.isPaused).toBe(true);
+    const pauseEvent = broadcasts.find(b => b.data.type === 'GAME_PAUSED');
+    expect(pauseEvent).toBeDefined();
+    expect(pauseEvent.data.timeRemaining).toBeGreaterThan(0);
+    expect(pauseEvent.data.timeRemaining).toBeLessThanOrEqual(30);
+  });
+
+  test('pauseGame: ігнорується якщо вже на паузі', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'QUESTION';
+    session.currentQuestionIndex = 0;
+    session.questionStartTime = Date.now() - 5000;
+    session.currentTimerLimit = 30;
+    session.isPaused = true; // вже на паузі
+
+    broadcasts.length = 0;
+    session.pauseGame();
+
+    const pauseEvents = broadcasts.filter(b => b.data.type === 'GAME_PAUSED');
+    expect(pauseEvents).toHaveLength(0);
+  });
+
+  test('pauseGame: ігнорується якщо стан не QUESTION', () => {
+    const { session, broadcasts } = createSession();
+    session.gameState = 'WAITING';
+
+    broadcasts.length = 0;
+    session.pauseGame();
+
+    const pauseEvents = broadcasts.filter(b => b.data.type === 'GAME_PAUSED');
+    expect(pauseEvents).toHaveLength(0);
+  });
+
+  test('resumeGame: встановлює isPaused=false та broadcast GAME_RESUMED', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'QUESTION';
+    session.currentQuestionIndex = 0;
+    session.questionStartTime = Date.now() - 5000;
+    session.currentTimerLimit = 30;
+    session.isPaused = true;
+    session.questionTimeRemaining = 20;
+    session.pausedAt = Date.now();
+
+    broadcasts.length = 0;
+    session.resumeGame();
+    clearSessionTimers(session);
+
+    expect(session.isPaused).toBe(false);
+    const resumeEvent = broadcasts.find(b => b.data.type === 'GAME_RESUMED');
+    expect(resumeEvent).toBeDefined();
+    expect(resumeEvent.data.timeRemaining).toBeGreaterThan(0);
+  });
+
+  test('resumeGame: ігнорується якщо не на паузі', () => {
+    const { session, broadcasts } = createSession();
+    session.gameState = 'QUESTION';
+    session.isPaused = false;
+
+    broadcasts.length = 0;
+    session.resumeGame();
+
+    const resumeEvents = broadcasts.filter(b => b.data.type === 'GAME_RESUMED');
+    expect(resumeEvents).toHaveLength(0);
+  });
+
+  test('forceStart: запускає гру зі стану WAITING', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'WAITING';
+
+    broadcasts.length = 0;
+    session.forceStart();
+    clearSessionTimers(session);
+
+    // Гра стартує (STARTING або одразу QUESTION)
+    expect(['STARTING', 'QUESTION']).toContain(session.gameState);
+    const startEvent = broadcasts.find(b =>
+      b.data.type === 'QUIZ_STARTING' || b.data.type === 'NEW_QUESTION'
+    );
+    expect(startEvent).toBeDefined();
+  });
+
+  test('forceStart: ігнорується якщо стан не WAITING', () => {
+    const { session } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'QUESTION';
+    session.currentQuestionIndex = 0;
+
+    // Не повинно кидати помилку і не змінювати стан
+    expect(() => session.forceStart()).not.toThrow();
+    expect(session.gameState).toBe('QUESTION');
+  });
+
+  test('skipQuestion: з QUESTION переходить в ANSWER_REVEAL', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'QUESTION';
+    session.currentQuestionIndex = 0;
+    session.questionStartTime = Date.now() - 5000;
+
+    broadcasts.length = 0;
+    session.skipQuestion();
+    clearSessionTimers(session);
+
+    expect(session.gameState).toBe('ANSWER_REVEAL');
+    const revealEvent = broadcasts.find(b => b.data.type === 'REVEAL_ANSWER');
+    expect(revealEvent).toBeDefined();
+  });
+
+  test('skipQuestion: з ANSWER_REVEAL переходить до LEADERBOARD', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'ANSWER_REVEAL';
+    session.currentQuestionIndex = 0;
+
+    broadcasts.length = 0;
+    session.skipQuestion();
+    clearSessionTimers(session);
+
+    expect(session.gameState).toBe('LEADERBOARD');
+    const lbEvent = broadcasts.find(b => b.data.type === 'SHOW_LEADERBOARD');
+    expect(lbEvent).toBeDefined();
+  });
+
+  test('skipQuestion: з LEADERBOARD переходить до наступного питання', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'LEADERBOARD';
+    session.currentQuestionIndex = 0; // є ще питання
+
+    broadcasts.length = 0;
+    session.skipQuestion();
+    clearSessionTimers(session);
+
+    expect(session.gameState).toBe('QUESTION');
+    const questionEvent = broadcasts.find(b => b.data.type === 'NEW_QUESTION');
+    expect(questionEvent).toBeDefined();
+  });
+
+  test('skipQuestion: з LEADERBOARD при останньому питанні переходить в ENDED', () => {
+    const { session, broadcasts } = createSession();
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'LEADERBOARD';
+    session.currentQuestionIndex = 2; // останнє (всього 3 питання, індекси 0-2)
+
+    broadcasts.length = 0;
+    session.skipQuestion();
+    clearSessionTimers(session);
+
+    expect(session.gameState).toBe('ENDED');
+    const endEvent = broadcasts.find(b => b.data.type === 'QUIZ_ENDED');
+    expect(endEvent).toBeDefined();
+  });
+});
+
+// ─────────────────────────────────────────────
+// ТЕСТИ: Phase 8 — Category Mode
+// ─────────────────────────────────────────────
+
+const CATEGORY_QUIZ = {
+  title: 'Категорійний квіз',
+  categoryMode: true,
+  rounds: [
+    {
+      options: [
+        { category: 'Географія', question: 'Столиця Франції?', answers: ['Берлін', 'Рим', 'Париж', 'Мадрид'], correctAnswer: 2 },
+        { category: 'Спорт', question: 'Гра з м\'ячем?', answers: ['Шахи', 'Футбол', 'Теніс', 'Плавання'], correctAnswer: 1 }
+      ]
+    },
+    {
+      options: [
+        { category: 'Наука', question: 'H2O = ?', answers: ['Сіль', 'Вода', 'Кисень', 'Вуглець'], correctAnswer: 1 },
+        { category: 'Мистецтво', question: 'Автор "Мони Лізи"?', answers: ['Пікассо', 'Ван Гог', 'Да Вінчі', 'Рафаель'], correctAnswer: 2 }
+      ]
+    }
+  ]
+};
+
+describe('AutoQuizSession — Category Mode', () => {
+  test('startCategorySelect: broadcast CATEGORY_SELECT у categoryMode', () => {
+    const { session, broadcasts } = createSession(CATEGORY_QUIZ);
+    session.addPlayer('s1', 'Петро');
+    session.addPlayer('s2', 'Марія');
+    // In category mode, startQuiz calls startCategorySelect (not nextQuestion)
+    session.gameState = 'STARTING';
+
+    broadcasts.length = 0;
+    session.startCategorySelect(); // starts selection for round 0
+    clearSessionTimers(session);
+
+    expect(session.gameState).toBe('CATEGORY_SELECT');
+    const catEvent = broadcasts.find(b => b.data.type === 'CATEGORY_SELECT');
+    expect(catEvent).toBeDefined();
+    expect(catEvent.data.options).toHaveLength(2);
+    expect(catEvent.data.options[0].category).toBe('Географія');
+    expect(catEvent.data.options[1].category).toBe('Спорт');
+    expect(catEvent.data.chooserNickname).toBeDefined();
+  });
+
+  test('submitCategory: гравець-chooser може обрати категорію', () => {
+    const { session, broadcasts } = createSession(CATEGORY_QUIZ);
+    session.addPlayer('s1', 'Петро');
+    session.addPlayer('s2', 'Марія');
+    session.gameState = 'STARTING';
+    session.startCategorySelect();
+    clearSessionTimers(session);
+
+    // Chooser socket is stored directly on session
+    const chooserId = session.currentChooserSocketId;
+
+    broadcasts.length = 0;
+    const result = session.submitCategory(chooserId, 0);
+    clearSessionTimers(session);
+
+    expect(result.success).toBe(true);
+    // Має broadcast CATEGORY_CHOSEN
+    const chosenEvent = broadcasts.find(b => b.data.type === 'CATEGORY_CHOSEN');
+    expect(chosenEvent).toBeDefined();
+    expect(chosenEvent.data.category).toBe('Географія');
+  });
+
+  test('submitCategory: відхиляє якщо не chooser', () => {
+    const { session, broadcasts } = createSession(CATEGORY_QUIZ);
+    session.addPlayer('s1', 'Петро');
+    session.addPlayer('s2', 'Марія');
+    session.gameState = 'STARTING';
+    session.startCategorySelect();
+    clearSessionTimers(session);
+
+    // Find who is NOT the chooser
+    const chooserId = session.currentChooserSocketId;
+    const nonChooserId = chooserId === 's1' ? 's2' : 's1';
+
+    const result = session.submitCategory(nonChooserId, 0);
+    expect(result.success).toBe(false);
+    // Error says it's not their turn
+    expect(result.error).toBeTruthy();
+  });
+
+  test('submitCategory: відхиляє якщо стан не CATEGORY_SELECT', () => {
+    const { session } = createSession(CATEGORY_QUIZ);
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'QUESTION';
+    session.currentQuestionIndex = 0;
+
+    const result = session.submitCategory('s1', 0);
+    expect(result.success).toBe(false);
+  });
+
+  test('submitCategory: відхиляє невалідний optionIndex', () => {
+    const { session, broadcasts } = createSession(CATEGORY_QUIZ);
+    session.addPlayer('s1', 'Петро');
+    session.gameState = 'STARTING';
+    session.startCategorySelect();
+    clearSessionTimers(session);
+
+    const chooserId = session.currentChooserSocketId;
+
+    const result = session.submitCategory(chooserId, 5); // invalid index (not 0 or 1)
+    expect(result.success).toBe(false);
+  });
+});

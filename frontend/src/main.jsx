@@ -5,6 +5,7 @@
  * - #/        → PlayerView (інтерфейс гравця, за замовчуванням)
  * - #/admin   → AdminPanel (моніторинг активних ігор)
  * - #/create  → QuizCreator (редактор квізів)
+ * - #/screen  → ProjectorView (великий екран для залу)
  */
 
 import React, { useState, useEffect } from 'react';
@@ -13,6 +14,7 @@ import PlayerView from './components/PlayerView.jsx';
 import AdminPanel from './components/AdminPanel.jsx';
 import QuizCreator from './components/QuizCreator.jsx';
 import StatsPanel from './components/StatsPanel.jsx';
+import ProjectorView from './components/ProjectorView.jsx';
 import './styles/theme.css';
 
 /**
@@ -45,6 +47,7 @@ function App() {
   if (route === '/admin') return <AdminPanel />;
   if (route === '/create') return <QuizCreator />;
   if (route === '/stats') return <StatsPanel />;
+  if (route.startsWith('/screen')) return <ProjectorView />;
   return <PlayerView />;
 }
 

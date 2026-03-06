@@ -10,7 +10,7 @@
  * - Експорт квізу як JSON файл
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import useLang from '../utils/useLang.js';
 import './QuizCreator.css';
@@ -57,6 +57,10 @@ export default function QuizCreator() {
 
   // Socket.IO ref (підключаємо лише при потребі)
   const socketRef = useRef(null);
+
+  // ── Host controls state (active after room creation) ──
+  const [isPaused, setIsPaused] = useState(false);
+  const [gameEnded, setGameEnded] = useState(false);
 
   // Drag-to-reorder refs and state
   const dragIndexRef = useRef(null);
@@ -336,6 +340,28 @@ export default function QuizCreator() {
   }, [validate, title, questions, rounds, categoryMode, questionTime, autoStart, minPlayers]);
 
   /**
+   * Слухаємо quiz-update після створення кімнати для host controls
+   */
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !roomCode) return;
+    const handler = (data) => {
+      if (data.type === 'GAME_PAUSED') setIsPaused(true);
+      if (data.type === 'GAME_RESUMED') setIsPaused(false);
+      if (data.type === 'QUIZ_ENDED') setGameEnded(true);
+    };
+    socket.on('quiz-update', handler);
+    return () => socket.off('quiz-update', handler);
+  }, [roomCode]);
+
+  /**
+   * Надсилає host-control команду (pause/resume/skip/start)
+   */
+  const sendHostControl = useCallback((action) => {
+    socketRef.current?.emit('host-control', { roomCode, action }, () => {});
+  }, [roomCode]);
+
+  /**
    * Скидає форму для створення нового квізу
    */
   const handleReset = useCallback(() => {
@@ -351,6 +377,8 @@ export default function QuizCreator() {
     setRounds([EMPTY_ROUND()]);
     setActiveRound(0);
     setError('');
+    setIsPaused(false);
+    setGameEnded(false);
   }, []);
 
   // ─────────────────────────────────────────────
@@ -664,6 +692,60 @@ export default function QuizCreator() {
               {window.location.protocol}//{window.location.hostname}:{window.location.port || 8080}
             </strong>
           </p>
+
+          {/* Посилання на Projector View */}
+          <a
+            href={`#/screen?room=${roomCode}`}
+            className="btn-outlined projector-link-btn"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            📺 {t('projectorLink')}
+            <span className="projector-link-hint"> — {t('projectorHint')}</span>
+          </a>
+
+          {/* Host Controls: керування грою */}
+          {!gameEnded && (
+            <div className="host-controls">
+              <div className="host-controls-title">{t('hostControls')}</div>
+              <div className="host-controls-buttons">
+                <button
+                  className="host-btn host-btn-start"
+                  onClick={() => sendHostControl('start')}
+                  title={t('hostStart')}
+                >
+                  ▶ {t('hostStart')}
+                </button>
+                {isPaused ? (
+                  <button
+                    className="host-btn host-btn-resume"
+                    onClick={() => sendHostControl('resume')}
+                  >
+                    ▶ {t('hostResume')}
+                  </button>
+                ) : (
+                  <button
+                    className="host-btn host-btn-pause"
+                    onClick={() => sendHostControl('pause')}
+                  >
+                    ⏸ {t('hostPause')}
+                  </button>
+                )}
+                <button
+                  className="host-btn host-btn-skip"
+                  onClick={() => sendHostControl('skip')}
+                >
+                  ⏭ {t('hostSkip')}
+                </button>
+              </div>
+              {isPaused && (
+                <div className="host-paused-badge">{t('gamePaused')}</div>
+              )}
+            </div>
+          )}
+          {gameEnded && (
+            <div className="host-ended-badge">Quiz ended</div>
+          )}
 
           <div className="success-actions">
             <a href="/" className="btn-outlined">{t('openAsPlayer')}</a>

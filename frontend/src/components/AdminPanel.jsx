@@ -243,6 +243,17 @@ export default function AdminPanel() {
                       👥 {session.playerCount}
                     </span>
                   </div>
+
+                  {/* Projector View link */}
+                  <a
+                    href={`#/screen?room=${session.roomCode}`}
+                    className="session-projector-link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('projectorHint')}
+                  >
+                    📺 {t('projectorLink')}
+                  </a>
                 </div>
               );
             })}

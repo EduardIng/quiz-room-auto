@@ -735,3 +735,105 @@
   letter-spacing: 1px;
   color: var(--color-text-muted);
 }
+
+/* ── Projector link on success screen ── */
+.projector-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  background: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: #a78bfa;
+  font-size: 1rem;
+}
+
+.projector-link-btn:hover {
+  background: rgba(167, 139, 250, 0.2);
+}
+
+.projector-link-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* ── Host Controls ── */
+.host-controls {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.host-controls-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.host-controls-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.host-btn {
+  padding: 10px 18px;
+  border-radius: var(--radius-md);
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.host-btn:hover {
+  opacity: 0.85;
+  transform: scale(1.03);
+}
+
+.host-btn-start {
+  background: rgba(39, 174, 96, 0.8);
+  color: #fff;
+}
+
+.host-btn-pause {
+  background: rgba(243, 156, 18, 0.8);
+  color: #fff;
+}
+
+.host-btn-resume {
+  background: rgba(52, 152, 219, 0.8);
+  color: #fff;
+}
+
+.host-btn-skip {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text);
+}
+
+.host-paused-badge {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #f39c12;
+  font-weight: 600;
+  animation: blink-badge 1s ease infinite alternate;
+}
+
+@keyframes blink-badge {
+  to { opacity: 0.4; }
+}
+
+.host-ended-badge {
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
