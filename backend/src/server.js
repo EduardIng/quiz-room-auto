@@ -22,7 +22,7 @@ const cors = require('cors');
 const { loadConfig, log } = require('./utils');
 const QuizRoomManager = require('./websocket-handler-auto');
 const db = require('./db');
-const { loadAllQuizzes } = require('./quiz-storage');
+const { loadAllQuizzes, saveQuiz, deleteQuiz } = require('./quiz-storage');
 const qrcode = require('qrcode');
 
 class QuizServer {
@@ -135,6 +135,32 @@ class QuizServer {
     this.app.get('/api/quizzes', (req, res) => {
       const quizzes = loadAllQuizzes();
       res.json({ success: true, quizzes });
+    });
+
+    // API: зберегти квіз у бібліотеку (папка quizzes/)
+    this.app.post('/api/quizzes/save', (req, res) => {
+      try {
+        const quizData = req.body;
+        if (!quizData || !quizData.title) {
+          return res.status(400).json({ success: false, error: 'Missing quiz data or title' });
+        }
+        const result = saveQuiz(quizData);
+        res.json({ success: true, id: result.id, filename: result.filename });
+      } catch (err) {
+        log('Server', `Помилка збереження квізу: ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // API: видалити квіз з бібліотеки
+    this.app.delete('/api/quizzes/:id', (req, res) => {
+      const { id } = req.params;
+      const deleted = deleteQuiz(id);
+      if (deleted) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ success: false, error: 'Quiz not found' });
+      }
     });
 
     // API: QR-код для підключення до кімнати

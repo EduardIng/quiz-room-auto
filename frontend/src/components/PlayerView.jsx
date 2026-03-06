@@ -74,6 +74,14 @@ export default function PlayerView() {
   // ── Список гравців в очікуванні ──
   const [waitingPlayers, setWaitingPlayers] = useState([]);
 
+  // ── Category mode state ──
+  const [categoryOptions, setCategoryOptions] = useState(null);
+  const [categoryChooser, setCategoryChooser] = useState('');
+  const [categoryTimeLeft, setCategoryTimeLeft] = useState(15);
+  const [categoryTimeLimit, setCategoryTimeLimit] = useState(15);
+  const [categoryChosen, setCategoryChosen] = useState(null);
+  const categoryTimerRef = useRef(null);
+
   // ── Ref для Socket.IO (не викликає ре-рендер) ──
   const socketRef = useRef(null);
 
@@ -83,6 +91,12 @@ export default function PlayerView() {
 
   // ── Ref для аудіо ──
   const audioRef = useRef(null);
+
+  // ── Ref для handleServerUpdate — щоб socket listener завжди викликав актуальну версію ──
+  const handleServerUpdateRef = useRef(null);
+
+  // ── Ref для question — щоб handleRevealAnswer завжди мав актуальне питання ──
+  const questionRef = useRef(null);
 
   // ─────────────────────────────────────────────
   // ІНІЦІАЛІЗАЦІЯ SOCKET.IO
@@ -99,8 +113,8 @@ export default function PlayerView() {
 
     socketRef.current = socket;
 
-    // Слухаємо головну подію від сервера
-    socket.on('quiz-update', handleServerUpdate);
+    // Слухаємо головну подію від сервера через ref — завжди актуальний обробник
+    socket.on('quiz-update', (data) => handleServerUpdateRef.current?.(data));
 
     // Оновлення списку гравців під час очікування
     socket.on('quiz-update', (data) => {
@@ -114,6 +128,7 @@ export default function PlayerView() {
     return () => {
       clearInterval(timerRef.current);
       clearInterval(countdownRef.current);
+      clearInterval(categoryTimerRef.current);
       socket.disconnect();
     };
   }, []); // [] - виконується один раз при монтуванні
@@ -147,6 +162,7 @@ export default function PlayerView() {
 
         // Встановлюємо дані питання
         setQuestion(data.question);
+        questionRef.current = data.question;
         setQuestionIndex(data.questionIndex);
         setTotalQuestions(data.totalQuestions);
         setTimeLimit(data.timeLimit);
@@ -192,10 +208,43 @@ export default function PlayerView() {
         setScreen('ended');
         break;
 
+      // ── Вибір категорії ──
+      case 'CATEGORY_SELECT':
+        clearInterval(categoryTimerRef.current);
+        setCategoryOptions(data.options);
+        setCategoryChooser(data.chooserNickname);
+        setCategoryTimeLimit(data.timeLimit || 15);
+        setCategoryTimeLeft(data.timeLimit || 15);
+        setCategoryChosen(null);
+        setScreen('category_select');
+        // Client-side countdown
+        {
+          let remaining = data.timeLimit || 15;
+          categoryTimerRef.current = setInterval(() => {
+            remaining -= 1;
+            setCategoryTimeLeft(remaining);
+            if (remaining <= 0) clearInterval(categoryTimerRef.current);
+          }, 1000);
+        }
+        break;
+
+      // ── Категорію обрано ──
+      case 'CATEGORY_CHOSEN':
+        clearInterval(categoryTimerRef.current);
+        setCategoryChosen({ category: data.category, wasTimeout: data.wasTimeout });
+        setScreen('category_chosen');
+        break;
+
       default:
         break;
     }
   }, [myNickname, selectedAnswer]); // eslint-disable-line
+
+  // Тримаємо ref синхронізованим із найсвіжішою версією handleServerUpdate
+  // (щоб socket listener завжди викликав актуальний обробник)
+  useEffect(() => {
+    handleServerUpdateRef.current = handleServerUpdate;
+  });
 
   // ─────────────────────────────────────────────
   // ТАЙМЕРИ
@@ -346,16 +395,30 @@ export default function PlayerView() {
     setMyScore(prev => prev + pointsEarned);
 
     // Зберігаємо дані для REVEAL екрану
+    const currentQuestion = questionRef.current;
     setRevealData({
       correctAnswer: data.correctAnswer,
-      correctAnswerText: question?.answers?.[data.correctAnswer]?.text || '',
+      correctAnswerText: currentQuestion?.answers?.[data.correctAnswer]?.text || '',
       isCorrect,
       didNotAnswer,
       pointsEarned
     });
 
     setScreen('reveal');
-  }, [myNickname, question]);
+  }, [myNickname]);
+
+  /**
+   * Обробляє натискання кнопки категорії (тільки для chooser)
+   *
+   * @param {number} choiceIndex - 0 або 1
+   */
+  const handleCategoryClick = useCallback((choiceIndex) => {
+    socketRef.current.emit('submit-category', { choiceIndex }, (response) => {
+      if (!response.success) {
+        console.warn('submit-category error:', response.error);
+      }
+    });
+  }, []);
 
   /**
    * Обробляє натискання "Грати знову" на ENDED екрані
@@ -364,15 +427,20 @@ export default function PlayerView() {
   const handlePlayAgain = useCallback(() => {
     clearInterval(timerRef.current);
     clearInterval(countdownRef.current);
+    clearInterval(categoryTimerRef.current);
 
     // Скидаємо весь стан гри
     setMyScore(0);
     setMyPosition(null);
     setQuestion(null);
+    questionRef.current = null;
     setSelectedAnswer(null);
     setRevealData(null);
     setLeaderboard([]);
     setWaitingPlayers([]);
+    setCategoryOptions(null);
+    setCategoryChooser('');
+    setCategoryChosen(null);
     setRoomCode('');
     setNickname('');
     setJoinError('');
@@ -482,6 +550,60 @@ export default function PlayerView() {
           <p className="screen-subtitle" style={{ marginBottom: 8 }}>Гра починається!</p>
           <div className="countdown-display">{countdown > 0 ? countdown : '🎯'}</div>
           <p className="screen-subtitle">Готуйся відповідати!</p>
+        </div>
+      )}
+
+      {/* ── 3b. CATEGORY_SELECT ЕКРАН ── */}
+      {screen === 'category_select' && categoryOptions && (
+        <div className="screen-card category-select-screen">
+          {/* Timer bar */}
+          <div className="category-timer-bar-wrapper">
+            <div
+              className="category-timer-bar"
+              style={{ width: `${Math.max(0, (categoryTimeLeft / categoryTimeLimit) * 100)}%` }}
+            />
+          </div>
+
+          <div style={{ padding: '20px 20px 0' }}>
+            <div className="category-timer-text">{categoryTimeLeft}s</div>
+
+            {myNickname === categoryChooser ? (
+              <>
+                <h2 className="screen-title" style={{ marginBottom: 8 }}>Твій вибір!</h2>
+                <p className="screen-subtitle" style={{ marginBottom: 20 }}>Обери категорію питання</p>
+                <div className="category-buttons">
+                  {categoryOptions.map((opt) => (
+                    <button
+                      key={opt.index}
+                      className="category-btn"
+                      onClick={() => handleCategoryClick(opt.index)}
+                    >
+                      {opt.category}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="category-wait-icon">🎲</div>
+                <p className="category-wait-text">
+                  Чекаємо поки <strong>{categoryChooser}</strong> обере категорію...
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 3c. CATEGORY_CHOSEN ЕКРАН ── */}
+      {screen === 'category_chosen' && categoryChosen && (
+        <div className="screen-card" style={{ textAlign: 'center', padding: '32px 24px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎯</div>
+          <p className="screen-subtitle" style={{ marginBottom: 8 }}>Обрана категорія</p>
+          <div className="category-chosen-name">{categoryChosen.category}</div>
+          {categoryChosen.wasTimeout && (
+            <p className="screen-subtitle" style={{ marginTop: 8, fontSize: '0.85rem' }}>(авто-вибір)</p>
+          )}
         </div>
       )}
 

@@ -28,12 +28,21 @@ const EMPTY_QUESTION = () => ({
   audio: ''
 });
 
+// Templates for category mode
+const EMPTY_OPTION = () => ({ category: '', question: '', answers: ['', '', '', ''], correctAnswer: 0, timeLimit: '', image: '', audio: '' });
+const EMPTY_ROUND  = () => ({ options: [EMPTY_OPTION(), EMPTY_OPTION()] });
+
 export default function QuizCreator() {
   const [t, lang, setLang] = useLang();
 
   // ── Стан квізу ──
   const [title, setTitle] = useState('');
   const [questions, setQuestions] = useState([EMPTY_QUESTION()]);
+
+  // ── Category mode state ──
+  const [categoryMode, setCategoryMode] = useState(false);
+  const [rounds, setRounds] = useState([EMPTY_ROUND()]);
+  const [activeRound, setActiveRound] = useState(0);
 
   // ── Налаштування гри ──
   const [questionTime, setQuestionTime] = useState(30);
@@ -56,6 +65,7 @@ export default function QuizCreator() {
   // Import / library refs and state
   const fileInputRef = useRef(null);
   const [importError, setImportError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState('');
   const [libraryQuizzes, setLibraryQuizzes] = useState(null); // null = not loaded
   const [showLibrary, setShowLibrary] = useState(false);
 
@@ -149,6 +159,46 @@ export default function QuizCreator() {
   }, []);
 
   // ─────────────────────────────────────────────
+  // CATEGORY MODE HELPERS
+  // ─────────────────────────────────────────────
+
+  const addRound = useCallback(() => {
+    setRounds(prev => [...prev, EMPTY_ROUND()]);
+    setActiveRound(prev => prev + 1);
+  }, []);
+
+  const removeRound = useCallback((i) => {
+    if (rounds.length <= 1) return;
+    setRounds(prev => prev.filter((_, idx) => idx !== i));
+    setActiveRound(prev => Math.min(prev, rounds.length - 2));
+  }, [rounds.length]);
+
+  const updateRoundOption = useCallback((roundIdx, optIdx, field, value) => {
+    setRounds(prev => prev.map((r, ri) => {
+      if (ri !== roundIdx) return r;
+      const options = r.options.map((opt, oi) => {
+        if (oi !== optIdx) return opt;
+        if (field === 'answers') return opt;  // handled separately
+        return { ...opt, [field]: value };
+      });
+      return { ...r, options };
+    }));
+  }, []);
+
+  const updateRoundOptionAnswer = useCallback((roundIdx, optIdx, aIdx, value) => {
+    setRounds(prev => prev.map((r, ri) => {
+      if (ri !== roundIdx) return r;
+      const options = r.options.map((opt, oi) => {
+        if (oi !== optIdx) return opt;
+        const answers = [...opt.answers];
+        answers[aIdx] = value;
+        return { ...opt, answers };
+      });
+      return { ...r, options };
+    }));
+  }, []);
+
+  // ─────────────────────────────────────────────
   // ВАЛІДАЦІЯ
   // ─────────────────────────────────────────────
 
@@ -165,18 +215,35 @@ export default function QuizCreator() {
       errors.push('Введіть назву квізу');
     }
 
-    questions.forEach((q, i) => {
-      if (!q.question.trim()) {
-        errors.push(`Питання ${i + 1}: введіть текст питання`);
-      }
-      const emptyAnswers = q.answers.filter(a => !a.trim());
-      if (emptyAnswers.length > 0) {
-        errors.push(`Питання ${i + 1}: заповніть усі 4 варіанти відповіді`);
-      }
-    });
+    if (categoryMode) {
+      rounds.forEach((r, i) => {
+        r.options.forEach((opt, j) => {
+          if (!opt.category.trim()) {
+            errors.push(`Раунд ${i + 1}, варіант ${j + 1}: введіть назву категорії`);
+          }
+          if (!opt.question.trim()) {
+            errors.push(`Раунд ${i + 1}, варіант ${j + 1}: введіть текст питання`);
+          }
+          const emptyAnswers = opt.answers.filter(a => !a.trim());
+          if (emptyAnswers.length > 0) {
+            errors.push(`Раунд ${i + 1}, варіант ${j + 1}: заповніть усі 4 варіанти відповіді`);
+          }
+        });
+      });
+    } else {
+      questions.forEach((q, i) => {
+        if (!q.question.trim()) {
+          errors.push(`Питання ${i + 1}: введіть текст питання`);
+        }
+        const emptyAnswers = q.answers.filter(a => !a.trim());
+        if (emptyAnswers.length > 0) {
+          errors.push(`Питання ${i + 1}: заповніть усі 4 варіанти відповіді`);
+        }
+      });
+    }
 
     return errors;
-  }, [title, questions]);
+  }, [title, questions, categoryMode, rounds]);
 
   // ─────────────────────────────────────────────
   // ЗАПУСК ГРИ
@@ -197,21 +264,44 @@ export default function QuizCreator() {
     setIsCreating(true);
 
     // Підготовуємо дані квізу (прибираємо порожні timeLimit)
-    const quizData = {
-      title: title.trim(),
-      questions: questions.map(q => {
-        const result = {
-          question: q.question.trim(),
-          answers: q.answers.map(a => a.trim()),
-          correctAnswer: q.correctAnswer
-        };
-        const tl = parseInt(q.timeLimit, 10);
-        if (!isNaN(tl) && tl >= 10 && tl <= 120) result.timeLimit = tl;
-        if (q.image?.trim()) result.image = q.image.trim();
-        if (q.audio?.trim()) result.audio = q.audio.trim();
-        return result;
-      })
-    };
+    let quizData;
+    if (categoryMode) {
+      quizData = {
+        title: title.trim(),
+        categoryMode: true,
+        rounds: rounds.map(r => ({
+          options: r.options.map(opt => {
+            const result = {
+              category: opt.category.trim(),
+              question: opt.question.trim(),
+              answers: opt.answers.map(a => a.trim()),
+              correctAnswer: opt.correctAnswer
+            };
+            const tl = parseInt(opt.timeLimit, 10);
+            if (!isNaN(tl) && tl >= 10 && tl <= 120) result.timeLimit = tl;
+            if (opt.image?.trim()) result.image = opt.image.trim();
+            if (opt.audio?.trim()) result.audio = opt.audio.trim();
+            return result;
+          })
+        }))
+      };
+    } else {
+      quizData = {
+        title: title.trim(),
+        questions: questions.map(q => {
+          const result = {
+            question: q.question.trim(),
+            answers: q.answers.map(a => a.trim()),
+            correctAnswer: q.correctAnswer
+          };
+          const tl = parseInt(q.timeLimit, 10);
+          if (!isNaN(tl) && tl >= 10 && tl <= 120) result.timeLimit = tl;
+          if (q.image?.trim()) result.image = q.image.trim();
+          if (q.audio?.trim()) result.audio = q.audio.trim();
+          return result;
+        })
+      };
+    }
 
     const settings = {
       questionTime,
@@ -243,7 +333,7 @@ export default function QuizCreator() {
       setError('Не вдалось підключитись до сервера. Переконайся що сервер запущений.');
       socket.disconnect();
     });
-  }, [validate, title, questions, questionTime, autoStart, minPlayers]);
+  }, [validate, title, questions, rounds, categoryMode, questionTime, autoStart, minPlayers]);
 
   /**
    * Скидає форму для створення нового квізу
@@ -257,6 +347,9 @@ export default function QuizCreator() {
     setTitle('');
     setQuestions([EMPTY_QUESTION()]);
     setActiveQuestion(0);
+    setCategoryMode(false);
+    setRounds([EMPTY_ROUND()]);
+    setActiveRound(0);
     setError('');
   }, []);
 
@@ -269,18 +362,37 @@ export default function QuizCreator() {
    * Дозволяє зберегти квіз у папку quizzes/ для повторного використання
    */
   const handleExportJSON = useCallback(() => {
-    const quizData = {
-      title: title.trim() || 'Мій квіз',
-      description: '',
-      questions: questions.map(q => ({
-        question: q.question.trim(),
-        answers: q.answers.map(a => a.trim()),
-        correctAnswer: q.correctAnswer,
-        ...(q.timeLimit ? { timeLimit: parseInt(q.timeLimit, 10) } : {}),
-        ...(q.image?.trim() ? { image: q.image.trim() } : {}),
-        ...(q.audio?.trim() ? { audio: q.audio.trim() } : {})
-      }))
-    };
+    let quizData;
+    if (categoryMode) {
+      quizData = {
+        title: title.trim() || 'Мій квіз',
+        categoryMode: true,
+        rounds: rounds.map(r => ({
+          options: r.options.map(opt => ({
+            category: opt.category.trim(),
+            question: opt.question.trim(),
+            answers: opt.answers.map(a => a.trim()),
+            correctAnswer: opt.correctAnswer,
+            ...(opt.timeLimit ? { timeLimit: parseInt(opt.timeLimit, 10) } : {}),
+            ...(opt.image?.trim() ? { image: opt.image.trim() } : {}),
+            ...(opt.audio?.trim() ? { audio: opt.audio.trim() } : {})
+          }))
+        }))
+      };
+    } else {
+      quizData = {
+        title: title.trim() || 'Мій квіз',
+        description: '',
+        questions: questions.map(q => ({
+          question: q.question.trim(),
+          answers: q.answers.map(a => a.trim()),
+          correctAnswer: q.correctAnswer,
+          ...(q.timeLimit ? { timeLimit: parseInt(q.timeLimit, 10) } : {}),
+          ...(q.image?.trim() ? { image: q.image.trim() } : {}),
+          ...(q.audio?.trim() ? { audio: q.audio.trim() } : {})
+        }))
+      };
+    }
 
     // Створюємо Blob та посилання для завантаження
     const blob = new Blob([JSON.stringify(quizData, null, 2)], { type: 'application/json' });
@@ -290,7 +402,7 @@ export default function QuizCreator() {
     a.download = `${(title || 'quiz').toLowerCase().replace(/\s+/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [title, questions]);
+  }, [title, questions, categoryMode, rounds]);
 
   // ─────────────────────────────────────────────
   // DRAG-TO-REORDER
@@ -345,20 +457,40 @@ export default function QuizCreator() {
     reader.onload = (evt) => {
       try {
         const quiz = JSON.parse(evt.target.result);
-        if (!quiz.title || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
-          setImportError('Invalid quiz JSON: missing title or questions');
+        if (!quiz.title) {
+          setImportError('Invalid quiz JSON: missing title');
           return;
         }
         setTitle(quiz.title);
-        setQuestions(quiz.questions.map(q => ({
-          question: q.question || '',
-          answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
-          correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
-          timeLimit: q.timeLimit ? String(q.timeLimit) : '',
-          image: q.image || '',
-          audio: q.audio || ''
-        })));
-        setActiveQuestion(0);
+        if (quiz.categoryMode && Array.isArray(quiz.rounds) && quiz.rounds.length > 0) {
+          setCategoryMode(true);
+          setRounds(quiz.rounds.map(r => ({
+            options: (r.options || []).map(opt => ({
+              category: opt.category || '',
+              question: opt.question || '',
+              answers: Array.isArray(opt.answers) && opt.answers.length === 4 ? opt.answers : ['', '', '', ''],
+              correctAnswer: typeof opt.correctAnswer === 'number' ? opt.correctAnswer : 0,
+              timeLimit: opt.timeLimit ? String(opt.timeLimit) : '',
+              image: opt.image || '',
+              audio: opt.audio || ''
+            }))
+          })));
+          setActiveRound(0);
+        } else if (Array.isArray(quiz.questions) && quiz.questions.length > 0) {
+          setCategoryMode(false);
+          setQuestions(quiz.questions.map(q => ({
+            question: q.question || '',
+            answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
+            correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+            timeLimit: q.timeLimit ? String(q.timeLimit) : '',
+            image: q.image || '',
+            audio: q.audio || ''
+          })));
+          setActiveQuestion(0);
+        } else {
+          setImportError('Invalid quiz JSON: missing questions or rounds');
+          return;
+        }
       } catch {
         setImportError('Could not parse JSON file');
       }
@@ -384,19 +516,115 @@ export default function QuizCreator() {
   }, [showLibrary]);
 
   /**
+   * Зберігає поточний квіз у бібліотеку (папка quizzes/ на сервері)
+   */
+  const handleSaveToLibrary = useCallback(async () => {
+    setImportError('');
+    setSaveSuccess('');
+    let quizData;
+    if (categoryMode) {
+      quizData = {
+        title: title.trim() || 'Мій квіз',
+        categoryMode: true,
+        rounds: rounds.map(r => ({
+          options: r.options.map(opt => ({
+            category: opt.category.trim(),
+            question: opt.question.trim(),
+            answers: opt.answers.map(a => a.trim()),
+            correctAnswer: opt.correctAnswer,
+            ...(opt.timeLimit ? { timeLimit: parseInt(opt.timeLimit, 10) } : {}),
+            ...(opt.image?.trim() ? { image: opt.image.trim() } : {}),
+            ...(opt.audio?.trim() ? { audio: opt.audio.trim() } : {})
+          }))
+        }))
+      };
+    } else {
+      quizData = {
+        title: title.trim() || 'Мій квіз',
+        questions: questions.map(q => ({
+          question: q.question.trim(),
+          answers: q.answers.map(a => a.trim()),
+          correctAnswer: q.correctAnswer,
+          ...(q.timeLimit ? { timeLimit: parseInt(q.timeLimit, 10) } : {}),
+          ...(q.image?.trim() ? { image: q.image.trim() } : {}),
+          ...(q.audio?.trim() ? { audio: q.audio.trim() } : {})
+        }))
+      };
+    }
+    try {
+      const res = await fetch('/api/quizzes/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quizData)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaveSuccess(`✓ Збережено: "${quizData.title}"`);
+        // Оновлюємо бібліотеку якщо вона відкрита
+        if (showLibrary) {
+          const libRes = await fetch('/api/quizzes');
+          const libData = await libRes.json();
+          setLibraryQuizzes(libData.quizzes || []);
+        }
+        setTimeout(() => setSaveSuccess(''), 3000);
+      } else {
+        setImportError(data.error || 'Could not save quiz');
+      }
+    } catch {
+      setImportError('Could not save quiz to library');
+    }
+  }, [title, questions, categoryMode, rounds, showLibrary]);
+
+  /**
+   * Видаляє квіз з бібліотеки (з підтвердженням)
+   */
+  const handleDeleteLibraryQuiz = useCallback(async (e, quizId, quizTitle) => {
+    e.stopPropagation();
+    if (!window.confirm(`Видалити "${quizTitle}" з бібліотеки?`)) return;
+    try {
+      const res = await fetch(`/api/quizzes/${encodeURIComponent(quizId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setLibraryQuizzes(prev => prev.filter(q => q.id !== quizId));
+      } else {
+        setImportError(data.error || 'Could not delete quiz');
+      }
+    } catch {
+      setImportError('Could not delete quiz');
+    }
+  }, []);
+
+  /**
    * Populates editor from a library quiz
    */
   const handleSelectLibraryQuiz = useCallback((quiz) => {
     setTitle(quiz.title);
-    setQuestions(quiz.questions.map(q => ({
-      question: q.question || '',
-      answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
-      correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
-      timeLimit: q.timeLimit ? String(q.timeLimit) : '',
-      image: q.image || '',
-      audio: q.audio || ''
-    })));
-    setActiveQuestion(0);
+    if (quiz.categoryMode && Array.isArray(quiz.rounds) && quiz.rounds.length > 0) {
+      setCategoryMode(true);
+      setRounds(quiz.rounds.map(r => ({
+        options: (r.options || []).map(opt => ({
+          category: opt.category || '',
+          question: opt.question || '',
+          answers: Array.isArray(opt.answers) && opt.answers.length === 4 ? opt.answers : ['', '', '', ''],
+          correctAnswer: typeof opt.correctAnswer === 'number' ? opt.correctAnswer : 0,
+          timeLimit: opt.timeLimit ? String(opt.timeLimit) : '',
+          image: opt.image || '',
+          audio: opt.audio || ''
+        }))
+      })));
+      setActiveRound(0);
+    } else {
+      setCategoryMode(false);
+      setQuestions(quiz.questions.map(q => ({
+        question: q.question || '',
+        answers: Array.isArray(q.answers) && q.answers.length === 4 ? q.answers : ['', '', '', ''],
+        correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+        timeLimit: q.timeLimit ? String(q.timeLimit) : '',
+        image: q.image || '',
+        audio: q.audio || ''
+      })));
+      setActiveQuestion(0);
+    }
     setShowLibrary(false);
     setImportError('');
   }, []);
@@ -408,6 +636,8 @@ export default function QuizCreator() {
   const LETTERS = ['A', 'B', 'C', 'D'];
   const LETTER_COLORS = ['var(--color-answer-a)', 'var(--color-answer-b)', 'var(--color-answer-c)', 'var(--color-answer-d)'];
   const currentQ = questions[activeQuestion];
+  const currentRound = rounds[activeRound];
+  const launchCount = categoryMode ? rounds.length : questions.length;
 
   // ── Успішне створення кімнати ──
   if (roomCode) {
@@ -472,8 +702,25 @@ export default function QuizCreator() {
       </header>
 
       <div className="creator-layout">
-        {/* ── ЛІВА КОЛОНКА: Назва + список питань ── */}
+        {/* ── ЛІВА КОЛОНКА: Назва + список питань/раундів ── */}
         <aside className="creator-sidebar">
+          {/* Category mode toggle */}
+          <div className="sidebar-section">
+            <label className="category-mode-toggle checkbox-label">
+              <input
+                type="checkbox"
+                checked={categoryMode}
+                onChange={e => setCategoryMode(e.target.checked)}
+              />
+              {t('categoryMode')}
+            </label>
+            {categoryMode && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                {t('categoryModeHint')}
+              </p>
+            )}
+          </div>
+
           {/* Назва квізу */}
           <div className="sidebar-section">
             <label className="field-label">{t('quizTitle')}</label>
@@ -487,42 +734,72 @@ export default function QuizCreator() {
             />
           </div>
 
-          {/* Список питань */}
-          <div className="sidebar-section">
-            <label className="field-label">{t('questionsList')} ({questions.length})</label>
-            <div className="questions-list">
-              {questions.map((q, i) => (
-                <div
-                  key={i}
-                  className={`question-list-item ${i === activeQuestion ? 'active' : ''} ${q.question.trim() ? 'filled' : ''} ${dragOverIndex === i ? 'drag-over' : ''}`}
-                  onClick={() => setActiveQuestion(i)}
-                  draggable
-                  onDragStart={() => handleDragStart(i)}
-                  onDragOver={e => handleDragOver(e, i)}
-                  onDrop={e => handleDrop(e, i)}
-                  onDragEnd={handleDragEnd}
-                >
-                  <span className="q-drag-handle" title="Drag to reorder">⠿</span>
-                  <span className="q-number">#{i + 1}</span>
-                  <span className="q-preview">
-                    {q.question.trim() || t('noText')}
-                  </span>
-                  {q.image && <span className="q-badge">🖼</span>}
-                  {q.audio && <span className="q-badge">🎵</span>}
-                  {questions.length > 1 && (
-                    <button
-                      className="q-remove"
-                      onClick={(e) => { e.stopPropagation(); removeQuestion(i); }}
-                      title="Видалити питання"
-                    >×</button>
-                  )}
-                </div>
-              ))}
+          {/* Список раундів (category mode) або питань (standard) */}
+          {categoryMode ? (
+            <div className="sidebar-section">
+              <label className="field-label">{t('round')} ({rounds.length})</label>
+              <div className="questions-list">
+                {rounds.map((r, i) => (
+                  <div
+                    key={i}
+                    className={`question-list-item ${i === activeRound ? 'active' : ''} ${r.options[0].category.trim() ? 'filled' : ''}`}
+                    onClick={() => setActiveRound(i)}
+                  >
+                    <span className="q-number">R{i + 1}</span>
+                    <span className="q-preview">
+                      {r.options[0].category.trim() || '—'} / {r.options[1].category.trim() || '—'}
+                    </span>
+                    {rounds.length > 1 && (
+                      <button
+                        className="q-remove"
+                        onClick={(e) => { e.stopPropagation(); removeRound(i); }}
+                        title="Видалити раунд"
+                      >×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button className="add-question-btn" onClick={addRound}>
+                {t('addRound')}
+              </button>
             </div>
-            <button className="add-question-btn" onClick={addQuestion}>
-              {t('addQuestion')}
-            </button>
-          </div>
+          ) : (
+            <div className="sidebar-section">
+              <label className="field-label">{t('questionsList')} ({questions.length})</label>
+              <div className="questions-list">
+                {questions.map((q, i) => (
+                  <div
+                    key={i}
+                    className={`question-list-item ${i === activeQuestion ? 'active' : ''} ${q.question.trim() ? 'filled' : ''} ${dragOverIndex === i ? 'drag-over' : ''}`}
+                    onClick={() => setActiveQuestion(i)}
+                    draggable
+                    onDragStart={() => handleDragStart(i)}
+                    onDragOver={e => handleDragOver(e, i)}
+                    onDrop={e => handleDrop(e, i)}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <span className="q-drag-handle" title="Drag to reorder">⠿</span>
+                    <span className="q-number">#{i + 1}</span>
+                    <span className="q-preview">
+                      {q.question.trim() || t('noText')}
+                    </span>
+                    {q.image && <span className="q-badge">🖼</span>}
+                    {q.audio && <span className="q-badge">🎵</span>}
+                    {questions.length > 1 && (
+                      <button
+                        className="q-remove"
+                        onClick={(e) => { e.stopPropagation(); removeQuestion(i); }}
+                        title="Видалити питання"
+                      >×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button className="add-question-btn" onClick={addQuestion}>
+                {t('addQuestion')}
+              </button>
+            </div>
+          )}
 
           {/* Налаштування гри */}
           <div className="sidebar-section">
@@ -569,121 +846,196 @@ export default function QuizCreator() {
           </div>
         </aside>
 
-        {/* ── ПРАВА КОЛОНКА: Редактор поточного питання ── */}
+        {/* ── ПРАВА КОЛОНКА: Редактор поточного питання/раунду ── */}
         <main className="creator-main">
-          <div className="question-editor">
-            <div className="editor-header">
-              <h3>Питання {activeQuestion + 1} з {questions.length}</h3>
-            </div>
+          {categoryMode && currentRound ? (
+            /* Category mode: two-column option panel */
+            <div className="question-editor">
+              <div className="editor-header">
+                <h3>{t('round')} {activeRound + 1} / {rounds.length}</h3>
+              </div>
+              <div className="options-grid">
+                {currentRound.options.map((opt, optIdx) => (
+                  <div key={optIdx} className={`option-panel option-panel-${optIdx}`}>
+                    <div className="option-header">{t('option')} {optIdx + 1}</div>
 
-            {/* Текст питання */}
-            <div className="field-group">
-              <label className="field-label">{t('questionText')}</label>
-              <textarea
-                className="creator-textarea"
-                placeholder={t('questionPlaceholder')}
-                value={currentQ.question}
-                onChange={e => updateQuestionText(activeQuestion, e.target.value)}
-                rows={3}
-                maxLength={300}
-              />
-            </div>
+                    {/* Category name */}
+                    <div className="field-group">
+                      <label className="field-label">{t('categoryName')}</label>
+                      <input
+                        className="creator-input"
+                        type="text"
+                        placeholder={t('categoryNamePlaceholder')}
+                        value={opt.category}
+                        onChange={e => updateRoundOption(activeRound, optIdx, 'category', e.target.value)}
+                        maxLength={60}
+                      />
+                    </div>
 
-            {/* Варіанти відповідей */}
-            <div className="field-group">
-              <label className="field-label">{t('answers')}</label>
-              <div className="answers-editor">
-                {currentQ.answers.map((ans, ai) => (
-                  <div
-                    key={ai}
-                    className={`answer-editor-row ${currentQ.correctAnswer === ai ? 'is-correct' : ''}`}
-                  >
-                    {/* Кнопка вибору правильної відповіді */}
-                    <button
-                      className="correct-toggle"
-                      style={{ background: currentQ.correctAnswer === ai ? LETTER_COLORS[ai] : 'transparent', borderColor: LETTER_COLORS[ai] }}
-                      onClick={() => setCorrectAnswer(activeQuestion, ai)}
-                      title="Позначити як правильну"
-                    >
-                      {currentQ.correctAnswer === ai ? '✓' : LETTERS[ai]}
-                    </button>
+                    {/* Question text */}
+                    <div className="field-group">
+                      <label className="field-label">{t('questionText')}</label>
+                      <textarea
+                        className="creator-textarea"
+                        placeholder={t('questionPlaceholder')}
+                        value={opt.question}
+                        onChange={e => updateRoundOption(activeRound, optIdx, 'question', e.target.value)}
+                        rows={3}
+                        maxLength={300}
+                      />
+                    </div>
 
-                    <input
-                      className="creator-input answer-input"
-                      type="text"
-                      placeholder={`Відповідь ${LETTERS[ai]}...`}
-                      value={ans}
-                      onChange={e => updateAnswer(activeQuestion, ai, e.target.value)}
-                      maxLength={150}
-                    />
+                    {/* Answers */}
+                    <div className="field-group">
+                      <label className="field-label">{t('answers')}</label>
+                      <div className="answers-editor">
+                        {opt.answers.map((ans, ai) => (
+                          <div
+                            key={ai}
+                            className={`answer-editor-row ${opt.correctAnswer === ai ? 'is-correct' : ''}`}
+                          >
+                            <button
+                              className="correct-toggle"
+                              style={{ background: opt.correctAnswer === ai ? LETTER_COLORS[ai] : 'transparent', borderColor: LETTER_COLORS[ai] }}
+                              onClick={() => updateRoundOption(activeRound, optIdx, 'correctAnswer', ai)}
+                              title="Позначити як правильну"
+                            >
+                              {opt.correctAnswer === ai ? '✓' : LETTERS[ai]}
+                            </button>
+                            <input
+                              className="creator-input answer-input"
+                              type="text"
+                              placeholder={`Відповідь ${LETTERS[ai]}...`}
+                              value={ans}
+                              onChange={e => updateRoundOptionAnswer(activeRound, optIdx, ai, e.target.value)}
+                              maxLength={150}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="field-hint">{t('answerHint')}</p>
+                    </div>
                   </div>
                 ))}
               </div>
-              <p className="field-hint">{t('answerHint')}</p>
             </div>
+          ) : (
+            /* Standard mode: single question editor */
+            <div className="question-editor">
+              <div className="editor-header">
+                <h3>Питання {activeQuestion + 1} з {questions.length}</h3>
+              </div>
 
-            {/* Індивідуальний таймер питання */}
-            <div className="field-group field-group-inline">
-              <label className="field-label">{t('timerOptional')}</label>
-              <input
-                className="creator-input timer-input"
-                type="number"
-                placeholder={`${questionTime} (з налаштувань)`}
-                value={currentQ.timeLimit}
-                onChange={e => updateTimeLimit(activeQuestion, e.target.value)}
-                min={10}
-                max={120}
-              />
-            </div>
-
-            {/* URL зображення (необов'язково) */}
-            <div className="field-group">
-              <label className="field-label">{t('imageUrl')}</label>
-              <div className="media-url-row">
-                <input
-                  className="creator-input"
-                  type="url"
-                  placeholder="https://example.com/image.jpg"
-                  value={currentQ.image}
-                  onChange={e => updateImage(activeQuestion, e.target.value)}
+              {/* Текст питання */}
+              <div className="field-group">
+                <label className="field-label">{t('questionText')}</label>
+                <textarea
+                  className="creator-textarea"
+                  placeholder={t('questionPlaceholder')}
+                  value={currentQ.question}
+                  onChange={e => updateQuestionText(activeQuestion, e.target.value)}
+                  rows={3}
+                  maxLength={300}
                 />
-                {currentQ.image && (
-                  <img
-                    src={currentQ.image}
-                    alt="preview"
-                    className="media-preview-thumb"
-                    onError={e => { e.target.style.display = 'none'; }}
-                    onLoad={e => { e.target.style.display = 'block'; }}
+              </div>
+
+              {/* Варіанти відповідей */}
+              <div className="field-group">
+                <label className="field-label">{t('answers')}</label>
+                <div className="answers-editor">
+                  {currentQ.answers.map((ans, ai) => (
+                    <div
+                      key={ai}
+                      className={`answer-editor-row ${currentQ.correctAnswer === ai ? 'is-correct' : ''}`}
+                    >
+                      {/* Кнопка вибору правильної відповіді */}
+                      <button
+                        className="correct-toggle"
+                        style={{ background: currentQ.correctAnswer === ai ? LETTER_COLORS[ai] : 'transparent', borderColor: LETTER_COLORS[ai] }}
+                        onClick={() => setCorrectAnswer(activeQuestion, ai)}
+                        title="Позначити як правильну"
+                      >
+                        {currentQ.correctAnswer === ai ? '✓' : LETTERS[ai]}
+                      </button>
+
+                      <input
+                        className="creator-input answer-input"
+                        type="text"
+                        placeholder={`Відповідь ${LETTERS[ai]}...`}
+                        value={ans}
+                        onChange={e => updateAnswer(activeQuestion, ai, e.target.value)}
+                        maxLength={150}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="field-hint">{t('answerHint')}</p>
+              </div>
+
+              {/* Індивідуальний таймер питання */}
+              <div className="field-group field-group-inline">
+                <label className="field-label">{t('timerOptional')}</label>
+                <input
+                  className="creator-input timer-input"
+                  type="number"
+                  placeholder={`${questionTime} (з налаштувань)`}
+                  value={currentQ.timeLimit}
+                  onChange={e => updateTimeLimit(activeQuestion, e.target.value)}
+                  min={10}
+                  max={120}
+                />
+              </div>
+
+              {/* URL зображення (необов'язково) */}
+              <div className="field-group">
+                <label className="field-label">{t('imageUrl')}</label>
+                <div className="media-url-row">
+                  <input
+                    className="creator-input"
+                    type="url"
+                    placeholder="https://example.com/image.jpg"
+                    value={currentQ.image}
+                    onChange={e => updateImage(activeQuestion, e.target.value)}
                   />
-                )}
+                  {currentQ.image && (
+                    <img
+                      src={currentQ.image}
+                      alt="preview"
+                      className="media-preview-thumb"
+                      onError={e => { e.target.style.display = 'none'; }}
+                      onLoad={e => { e.target.style.display = 'block'; }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* URL аудіо (необов'язково) */}
+              <div className="field-group">
+                <label className="field-label">{t('audioUrl')}</label>
+                <div className="media-url-row">
+                  <input
+                    className="creator-input"
+                    type="url"
+                    placeholder="https://example.com/audio.mp3"
+                    value={currentQ.audio}
+                    onChange={e => updateAudio(activeQuestion, e.target.value)}
+                  />
+                  {currentQ.audio && (
+                    <audio
+                      controls
+                      src={currentQ.audio}
+                      className="media-audio-preview"
+                    />
+                  )}
+                </div>
               </div>
             </div>
-
-            {/* URL аудіо (необов'язково) */}
-            <div className="field-group">
-              <label className="field-label">{t('audioUrl')}</label>
-              <div className="media-url-row">
-                <input
-                  className="creator-input"
-                  type="url"
-                  placeholder="https://example.com/audio.mp3"
-                  value={currentQ.audio}
-                  onChange={e => updateAudio(activeQuestion, e.target.value)}
-                />
-                {currentQ.audio && (
-                  <audio
-                    controls
-                    src={currentQ.audio}
-                    className="media-audio-preview"
-                  />
-                )}
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Помилка */}
           {error && <div className="creator-error">{error}</div>}
           {importError && <div className="creator-error">{importError}</div>}
+          {saveSuccess && <div className="creator-save-success">{saveSuccess}</div>}
 
           {/* Library dropdown */}
           {showLibrary && libraryQuizzes && (
@@ -691,14 +1043,24 @@ export default function QuizCreator() {
               {libraryQuizzes.length === 0
                 ? <div className="library-empty">No quizzes in library</div>
                 : libraryQuizzes.map(quiz => (
-                  <button
-                    key={quiz.id}
-                    className="library-item"
-                    onClick={() => handleSelectLibraryQuiz(quiz)}
-                  >
-                    <span className="library-title">{quiz.title}</span>
-                    <span className="library-count">{quiz.questions.length}Q</span>
-                  </button>
+                  <div key={quiz.id} className="library-item-row">
+                    <button
+                      className="library-item"
+                      onClick={() => handleSelectLibraryQuiz(quiz)}
+                    >
+                      <span className="library-title">{quiz.title}</span>
+                      <span className="library-count">
+                        {quiz.categoryMode
+                          ? `${quiz.rounds.length}R`
+                          : `${quiz.questions.length}Q`}
+                      </span>
+                    </button>
+                    <button
+                      className="library-delete-btn"
+                      onClick={(e) => handleDeleteLibraryQuiz(e, quiz.id, quiz.title)}
+                      title="Видалити з бібліотеки"
+                    >✕</button>
+                  </div>
                 ))
               }
             </div>
@@ -709,7 +1071,7 @@ export default function QuizCreator() {
             <button
               className="btn-export"
               onClick={handleExportJSON}
-              disabled={!title.trim() || questions.some(q => !q.question.trim())}
+              disabled={!title.trim() || (categoryMode ? rounds.some(r => r.options.some(o => !o.question.trim())) : questions.some(q => !q.question.trim()))}
               title="Save as JSON"
             >
               {t('saveJSON')}
@@ -720,6 +1082,14 @@ export default function QuizCreator() {
               title="Import JSON file"
             >
               {t('importJSON')}
+            </button>
+            <button
+              className="btn-save-library"
+              onClick={handleSaveToLibrary}
+              disabled={!title.trim()}
+              title="Save to library on server"
+            >
+              {t('saveToLibrary')}
             </button>
             <button
               className="btn-import"
@@ -733,7 +1103,7 @@ export default function QuizCreator() {
               onClick={handleCreateRoom}
               disabled={isCreating}
             >
-              {isCreating ? t('launching') : `${t('launchQuiz')} (${questions.length})`}
+              {isCreating ? t('launching') : `${t('launchQuiz')} (${launchCount})`}
             </button>
           </div>
         </main>

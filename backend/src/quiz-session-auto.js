@@ -22,11 +22,23 @@ class AutoQuizSession {
    * @param {Object} settings - Налаштування таймерів та поведінки
    */
   constructor(quizData, settings, db = null) {
+    // Category mode: uses rounds instead of flat questions array
+    this.isCategoryMode = !!(quizData.categoryMode && quizData.rounds);
+    this.rounds = this.isCategoryMode ? quizData.rounds : null;
+    this.chooserIndex = 0;
+    this.playerJoinOrder = [];
+    this.currentChooserSocketId = null;
+    this.categorySelectTimer = null;
+    this.categorySelectTime = settings.categorySelectTime || 15;
+
     // Дані квізу: назва, питання
     // Якщо shuffle увімкнено — перемішуємо копію масиву питань (не змінюємо оригінал)
-    this.quizData = settings.shuffle
-      ? { ...quizData, questions: this._shuffleArray([...quizData.questions]) }
-      : quizData;
+    // In category mode, questions array starts empty and is populated at runtime
+    this.quizData = this.isCategoryMode
+      ? { ...quizData, questions: [] }
+      : (settings.shuffle
+          ? { ...quizData, questions: this._shuffleArray([...quizData.questions]) }
+          : quizData);
 
     // Налаштування: таймери, autoStart, waitForAllPlayers тощо
     this.settings = settings;
@@ -137,6 +149,9 @@ class AutoQuizSession {
       answers: []            // історія відповідей по питаннях
     });
 
+    // Track join order for category chooser rotation
+    this.playerJoinOrder.push(socketId);
+
     log('Session', `Гравець "${nickname}" (${socketId}) приєднався. Гравців: ${this.players.size}`);
 
     // Повідомляємо всіх в кімнаті про нового гравця
@@ -182,6 +197,16 @@ class AutoQuizSession {
     this.players.delete(socketId);
     this.currentAnswers.delete(socketId);
 
+    // Update join order tracking
+    const joinIdx = this.playerJoinOrder.indexOf(socketId);
+    if (joinIdx !== -1) {
+      this.playerJoinOrder.splice(joinIdx, 1);
+      // Keep chooserIndex valid after removal
+      if (joinIdx < this.chooserIndex) {
+        this.chooserIndex = Math.max(0, this.chooserIndex - 1);
+      }
+    }
+
     log('Session', `Гравець "${player.nickname}" відключився. Залишилось: ${this.players.size}`);
 
     // Якщо гравців не залишилось - нічого не broadcast
@@ -202,6 +227,15 @@ class AutoQuizSession {
         log('Session', 'Всі гравці відповіли після відключення. Завершуємо питання достроково.');
         this.endQuestion();
       }
+    }
+
+    // If the chooser disconnected during CATEGORY_SELECT, auto-resolve
+    if (this.gameState === 'CATEGORY_SELECT' && socketId === this.currentChooserSocketId) {
+      clearTimeout(this.categorySelectTimer);
+      this.categorySelectTimer = null;
+      const roundIndex = this.currentQuestionIndex + 1;
+      const randomChoice = Math.floor(Math.random() * 2);
+      this._resolveCategory(roundIndex, randomChoice, true);
     }
   }
 
@@ -249,17 +283,23 @@ class AutoQuizSession {
     this.startedAt = Date.now();
     log('Session', `Квіз "${this.quizData.title}" починається! Відлік 3 секунди...`);
 
+    const totalQuestions = this.isCategoryMode ? this.rounds.length : this.quizData.questions.length;
+
     // Відправляємо сигнал початку з відліком
     this.broadcast({
       type: 'QUIZ_STARTING',
       countdown: 3,
       quizTitle: this.quizData.title,
-      totalQuestions: this.quizData.questions.length
+      totalQuestions
     });
 
-    // Чекаємо 3 секунди і переходимо до першого питання
+    // Чекаємо 3 секунди і переходимо до першого питання/вибору категорії
     this.transitionTimer = setTimeout(() => {
-      this.nextQuestion();
+      if (this.isCategoryMode) {
+        this.startCategorySelect();
+      } else {
+        this.nextQuestion();
+      }
     }, 3000);
   }
 
@@ -288,8 +328,10 @@ class AutoQuizSession {
     // Переходимо до наступного питання
     this.currentQuestionIndex++;
 
+    const totalQuestions = this.isCategoryMode ? this.rounds.length : this.quizData.questions.length;
+
     // Перевіряємо чи є ще питання
-    if (this.currentQuestionIndex >= this.quizData.questions.length) {
+    if (this.currentQuestionIndex >= totalQuestions) {
       // Всі питання пройдено - завершуємо квіз
       this.endQuiz();
       return;
@@ -307,14 +349,14 @@ class AutoQuizSession {
     const question = this.getCurrentQuestion();
     const timeLimit = question.timeLimit || this.settings.questionTime;
 
-    log('Session', `Питання ${this.currentQuestionIndex + 1}/${this.quizData.questions.length}: "${question.question}"`);
+    log('Session', `Питання ${this.currentQuestionIndex + 1}/${totalQuestions}: "${question.question}"`);
 
     // Відправляємо питання всім гравцям
     // ВАЖЛИВО: відправляємо тільки варіанти відповідей БЕЗ правильної відповіді
     this.broadcast({
       type: 'NEW_QUESTION',
       questionIndex: this.currentQuestionIndex + 1,  // 1-based для відображення
-      totalQuestions: this.quizData.questions.length,
+      totalQuestions,
       question: {
         text: question.question,
         answers: question.answers.map((text, id) => ({ id, text })),
@@ -406,8 +448,9 @@ class AutoQuizSession {
   showLeaderboard() {
     this.gameState = 'LEADERBOARD';
 
+    const totalQuestions = this.isCategoryMode ? this.rounds.length : this.quizData.questions.length;
     const leaderboard = this.calculateLeaderboard();
-    const isLastQuestion = this.currentQuestionIndex >= this.quizData.questions.length - 1;
+    const isLastQuestion = this.currentQuestionIndex >= totalQuestions - 1;
 
     log('Session', `Leaderboard. Лідер: "${leaderboard[0]?.nickname}" (${leaderboard[0]?.score} балів)`);
 
@@ -415,20 +458,130 @@ class AutoQuizSession {
       type: 'SHOW_LEADERBOARD',
       leaderboard,
       questionIndex: this.currentQuestionIndex + 1,
-      totalQuestions: this.quizData.questions.length,
+      totalQuestions,
       isLastQuestion
     });
 
     // Плануємо перехід до наступного кроку через leaderboardTime секунд
     this.transitionTimer = setTimeout(() => {
       if (isLastQuestion) {
-        // Це було останнє питання - завершуємо квіз
         this.endQuiz();
+      } else if (this.isCategoryMode) {
+        this.startCategorySelect();
       } else {
-        // Ще є питання - переходимо до наступного
         this.nextQuestion();
       }
     }, this.settings.leaderboardTime * 1000);
+  }
+
+  // ─────────────────────────────────────────────
+  // CATEGORY MODE МЕТОДИ
+  // ─────────────────────────────────────────────
+
+  /**
+   * Починає вибір категорії — переводить гру в стан CATEGORY_SELECT
+   */
+  startCategorySelect() {
+    this.gameState = 'CATEGORY_SELECT';
+
+    const roundIndex = this.currentQuestionIndex + 1; // next round (0-based index into rounds)
+
+    // Get active players in join order
+    const activeIds = this.playerJoinOrder.filter(id => this.players.has(id));
+    if (activeIds.length === 0) {
+      this.endQuiz();
+      return;
+    }
+
+    const chooserSocketId = activeIds[this.chooserIndex % activeIds.length];
+    this.currentChooserSocketId = chooserSocketId;
+    const chooserPlayer = this.players.get(chooserSocketId);
+    const chooserNickname = chooserPlayer ? chooserPlayer.nickname : '';
+
+    const round = this.rounds[roundIndex];
+    const options = round.options.map((opt, idx) => ({ index: idx, category: opt.category }));
+
+    log('Session', `CATEGORY_SELECT: раунд ${roundIndex + 1}, chooser="${chooserNickname}"`);
+
+    this.broadcast({
+      type: 'CATEGORY_SELECT',
+      chooserNickname,
+      options,
+      roundIndex: roundIndex + 1,     // 1-based for display
+      totalRounds: this.rounds.length,
+      timeLimit: this.categorySelectTime
+    });
+
+    // Auto-resolve on timeout
+    this.categorySelectTimer = setTimeout(() => {
+      const randomChoice = Math.floor(Math.random() * 2);
+      this._resolveCategory(roundIndex, randomChoice, true);
+    }, this.categorySelectTime * 1000);
+  }
+
+  /**
+   * Обробляє вибір категорії гравцем
+   *
+   * @param {string} socketId - ID гравця що обирає
+   * @param {number} choiceIndex - 0 або 1
+   * @returns {{ success: boolean, error?: string }}
+   */
+  submitCategory(socketId, choiceIndex) {
+    if (this.gameState !== 'CATEGORY_SELECT') {
+      return { success: false, error: 'Зараз не час для вибору категорії' };
+    }
+    if (socketId !== this.currentChooserSocketId) {
+      return { success: false, error: 'Зараз не твоя черга обирати' };
+    }
+    if (choiceIndex !== 0 && choiceIndex !== 1) {
+      return { success: false, error: 'choiceIndex має бути 0 або 1' };
+    }
+
+    clearTimeout(this.categorySelectTimer);
+    this.categorySelectTimer = null;
+
+    const roundIndex = this.currentQuestionIndex + 1;
+    this._resolveCategory(roundIndex, choiceIndex, false);
+
+    return { success: true };
+  }
+
+  /**
+   * Вирішує вибір категорії — будує питання, broadcast CATEGORY_CHOSEN, запускає nextQuestion
+   *
+   * @param {number} roundIndex - 0-based index into this.rounds
+   * @param {number} choiceIndex - 0 or 1
+   * @param {boolean} wasTimeout - чи вибір відбувся через таймаут
+   */
+  _resolveCategory(roundIndex, choiceIndex, wasTimeout) {
+    this.chooserIndex++;
+
+    const round = this.rounds[roundIndex];
+    const option = round.options[choiceIndex];
+
+    // Build question object from the chosen option
+    const questionObj = {
+      question: option.question,
+      answers: option.answers,
+      correctAnswer: option.correctAnswer,
+      category: option.category
+    };
+    if (option.timeLimit) questionObj.timeLimit = option.timeLimit;
+    if (option.image) questionObj.image = option.image;
+    if (option.audio) questionObj.audio = option.audio;
+
+    this.quizData.questions.push(questionObj);
+
+    log('Session', `CATEGORY_CHOSEN: "${option.category}" (choiceIndex=${choiceIndex}, wasTimeout=${wasTimeout})`);
+
+    this.broadcast({
+      type: 'CATEGORY_CHOSEN',
+      category: option.category,
+      choiceIndex,
+      wasTimeout
+    });
+
+    setTimeout(() => this.nextQuestion(), 1000);
   }
 
   /**
@@ -451,8 +604,10 @@ class AutoQuizSession {
     // Зупиняємо всі активні таймери
     clearTimeout(this.questionTimer);
     clearTimeout(this.transitionTimer);
+    clearTimeout(this.categorySelectTimer);
     this.questionTimer = null;
     this.transitionTimer = null;
+    this.categorySelectTimer = null;
 
     this.gameState = 'ENDED';
 
@@ -734,10 +889,11 @@ class AutoQuizSession {
    * @returns {Object} Стан гри для синхронізації клієнта
    */
   getState() {
+    const totalQuestions = this.isCategoryMode ? this.rounds.length : this.quizData.questions.length;
     return {
       gameState: this.gameState,
       players: this._getPlayerList(),
-      totalQuestions: this.quizData.questions.length,
+      totalQuestions,
       currentQuestionIndex: this.currentQuestionIndex,
       quizTitle: this.quizData.title
     };

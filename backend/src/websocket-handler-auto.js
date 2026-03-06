@@ -55,6 +55,7 @@ class QuizRoomManager {
       socket.on('create-quiz', (data, callback) => this.handleCreateQuiz(socket, data, callback));
       socket.on('join-quiz', (data, callback) => this.handleJoinQuiz(socket, data, callback));
       socket.on('submit-answer', (data, callback) => this.handleSubmitAnswer(socket, data, callback));
+      socket.on('submit-category', (data, callback) => this.handleSubmitCategory(socket, data, callback));
       socket.on('get-game-state', (data, callback) => this.handleGetGameState(socket, data, callback));
       socket.on('disconnect', () => this.handleDisconnect(socket));
     });
@@ -96,22 +97,50 @@ class QuizRoomManager {
         return respond({ success: false, error: 'Відсутні дані квізу' });
       }
 
-      if (!data.quizData.questions || !Array.isArray(data.quizData.questions)) {
-        return respond({ success: false, error: 'Квіз повинен мати масив питань' });
-      }
-
-      if (data.quizData.questions.length === 0) {
-        return respond({ success: false, error: 'Квіз повинен мати хоча б одне питання' });
-      }
-
-      // Перевіряємо кожне питання
-      for (let i = 0; i < data.quizData.questions.length; i++) {
-        const q = data.quizData.questions[i];
-        if (!q.question || !q.answers || q.answers.length !== 4) {
-          return respond({ success: false, error: `Питання ${i + 1} має неправильний формат (потрібно 4 варіанти відповіді)` });
+      // Category mode validation
+      if (data.quizData.categoryMode) {
+        if (!Array.isArray(data.quizData.rounds) || data.quizData.rounds.length === 0) {
+          return respond({ success: false, error: 'Квіз у режимі категорій повинен мати масив раундів' });
         }
-        if (typeof q.correctAnswer !== 'number' || q.correctAnswer < 0 || q.correctAnswer > 3) {
-          return respond({ success: false, error: `Питання ${i + 1}: correctAnswer має бути числом 0-3` });
+        for (let i = 0; i < data.quizData.rounds.length; i++) {
+          const round = data.quizData.rounds[i];
+          if (!Array.isArray(round.options) || round.options.length !== 2) {
+            return respond({ success: false, error: `Раунд ${i + 1}: потрібно рівно 2 варіанти категорій` });
+          }
+          for (let j = 0; j < round.options.length; j++) {
+            const opt = round.options[j];
+            if (!opt.category || typeof opt.category !== 'string') {
+              return respond({ success: false, error: `Раунд ${i + 1}, варіант ${j + 1}: вкажіть назву категорії` });
+            }
+            if (!opt.question || !Array.isArray(opt.answers) || opt.answers.length !== 4) {
+              return respond({ success: false, error: `Раунд ${i + 1}, варіант ${j + 1}: неправильний формат (потрібно 4 варіанти відповіді)` });
+            }
+            if (typeof opt.correctAnswer !== 'number' || opt.correctAnswer < 0 || opt.correctAnswer > 3) {
+              return respond({ success: false, error: `Раунд ${i + 1}, варіант ${j + 1}: correctAnswer має бути числом 0-3` });
+            }
+          }
+        }
+        // Set empty questions array for category mode
+        data.quizData.questions = [];
+      } else {
+        // Standard quiz validation
+        if (!data.quizData.questions || !Array.isArray(data.quizData.questions)) {
+          return respond({ success: false, error: 'Квіз повинен мати масив питань' });
+        }
+
+        if (data.quizData.questions.length === 0) {
+          return respond({ success: false, error: 'Квіз повинен мати хоча б одне питання' });
+        }
+
+        // Перевіряємо кожне питання
+        for (let i = 0; i < data.quizData.questions.length; i++) {
+          const q = data.quizData.questions[i];
+          if (!q.question || !q.answers || q.answers.length !== 4) {
+            return respond({ success: false, error: `Питання ${i + 1} має неправильний формат (потрібно 4 варіанти відповіді)` });
+          }
+          if (typeof q.correctAnswer !== 'number' || q.correctAnswer < 0 || q.correctAnswer > 3) {
+            return respond({ success: false, error: `Питання ${i + 1}: correctAnswer має бути числом 0-3` });
+          }
         }
       }
 
@@ -281,6 +310,52 @@ class QuizRoomManager {
 
     } catch (err) {
       log('WS', `Помилка при обробці відповіді: ${err.message}`);
+      respond({ success: false, error: 'Внутрішня помилка сервера' });
+    }
+  }
+
+  /**
+   * Обробляє вибір категорії гравцем
+   *
+   * Подія: 'submit-category'
+   * Відправник: Player (той чия черга)
+   *
+   * @param {Object} socket - Socket.IO сокет гравця
+   * @param {Object} data - { choiceIndex: 0|1 }
+   * @param {Function} callback - Функція відповіді
+   */
+  handleSubmitCategory(socket, data, callback) {
+    const respond = typeof callback === 'function' ? callback : () => {};
+
+    try {
+      const roomCode = this.socketToRoom.get(socket.id);
+
+      if (!roomCode) {
+        return respond({ success: false, error: 'Ви не знаходитесь в жодній кімнаті' });
+      }
+
+      const session = this.sessions.get(roomCode);
+
+      if (!session) {
+        return respond({ success: false, error: 'Сесія не знайдена' });
+      }
+
+      if (data === undefined || data === null || data.choiceIndex === undefined) {
+        return respond({ success: false, error: 'Вкажіть choiceIndex' });
+      }
+
+      const choiceIndex = Number(data.choiceIndex);
+
+      if (choiceIndex !== 0 && choiceIndex !== 1) {
+        return respond({ success: false, error: 'choiceIndex має бути 0 або 1' });
+      }
+
+      const result = session.submitCategory(socket.id, choiceIndex);
+
+      respond(result);
+
+    } catch (err) {
+      log('WS', `Помилка при обробці вибору категорії: ${err.message}`);
       respond({ success: false, error: 'Внутрішня помилка сервера' });
     }
   }

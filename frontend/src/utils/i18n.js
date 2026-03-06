@@ -78,6 +78,7 @@ export const TRANSLATIONS = {
     audioUrl: 'URL аудіо (необов\'язково)',
     saveJSON: '⬇ Зберегти JSON',
     importJSON: '⬆ Імпорт JSON',
+    saveToLibrary: '💾 Зберегти в бібліотеку',
     loadLibrary: '📂 З бібліотеки',
     launchQuiz: '🚀 Запустити квіз',
     launching: '⏳ Створення...',
@@ -102,6 +103,20 @@ export const TRANSLATIONS = {
     back: '← Назад',
     leaderboardBtn: 'Рейтинг',
     hideBtn: 'Сховати',
+
+    // Category mode
+    youChoose: 'Твій вибір категорії!',
+    waitingForChooser: 'Чекаємо поки {name} обере категорію...',
+    categoryTimeLeft: 'Залишилось',
+    categoryChosen: 'Обрана категорія',
+    categoryAutoChosen: '(авто-вибір)',
+    categoryMode: 'Режим категорій',
+    categoryModeHint: 'Гравці по черзі обирають категорію питання',
+    round: 'Раунд',
+    addRound: '+ Додати раунд',
+    option: 'Варіант',
+    categoryName: 'Назва категорії',
+    categoryNamePlaceholder: 'Наприклад: Географія',
   },
 
   en: {
@@ -179,6 +194,7 @@ export const TRANSLATIONS = {
     audioUrl: 'Audio URL (optional)',
     saveJSON: '⬇ Save JSON',
     importJSON: '⬆ Import JSON',
+    saveToLibrary: '💾 Save to library',
     loadLibrary: '📂 From library',
     launchQuiz: '🚀 Launch Quiz',
     launching: '⏳ Creating...',
@@ -203,6 +219,20 @@ export const TRANSLATIONS = {
     back: '← Back',
     leaderboardBtn: 'Leaderboard',
     hideBtn: 'Hide',
+
+    // Category mode
+    youChoose: 'Your turn to pick a category!',
+    waitingForChooser: 'Waiting for {name} to choose a category...',
+    categoryTimeLeft: 'Time left',
+    categoryChosen: 'Category chosen',
+    categoryAutoChosen: '(auto-selected)',
+    categoryMode: 'Category Mode',
+    categoryModeHint: 'Players take turns choosing the question category',
+    round: 'Round',
+    addRound: '+ Add round',
+    option: 'Option',
+    categoryName: 'Category name',
+    categoryNamePlaceholder: 'E.g.: Geography',
   }
 };
 

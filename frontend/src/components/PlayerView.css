@@ -732,3 +732,83 @@
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
+
+/* ─────────────────────────────────────────
+   CATEGORY SELECT / CHOSEN SCREENS
+───────────────────────────────────────── */
+
+.category-select-screen {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Thin timer bar at top */
+.category-timer-bar-wrapper {
+  height: 6px;
+  background: rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+
+.category-timer-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light));
+  transition: width 1s linear;
+}
+
+.category-timer-text {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+/* Two large category buttons */
+.category-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.category-btn {
+  width: 100%;
+  padding: 28px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  transition: transform var(--transition), opacity var(--transition);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.category-btn:nth-child(1) { background: var(--color-primary); }
+.category-btn:nth-child(2) { background: #e67e22; }
+
+.category-btn:active { transform: scale(0.96); }
+.category-btn:hover  { opacity: 0.9; }
+
+/* Waiting view */
+.category-wait-icon {
+  font-size: 3.5rem;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.category-wait-text {
+  font-size: 1.05rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* Chosen category name */
+.category-chosen-name {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-primary-light);
+  margin: 8px 0;
+  animation: countdownPop 0.5s ease;
+}
