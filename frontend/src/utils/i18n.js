@@ -117,6 +117,26 @@ export const TRANSLATIONS = {
     option: 'Варіант',
     categoryName: 'Назва категорії',
     categoryNamePlaceholder: 'Наприклад: Географія',
+
+    // Host Controls
+    hostControls: 'Керування грою',
+    hostPause: 'Пауза',
+    hostResume: 'Відновити',
+    hostSkip: 'Пропустити',
+    hostStart: 'Старт',
+    gamePaused: 'Гра на паузі',
+    projectorLink: 'Projector View',
+    projectorHint: 'Відкрий на великому екрані',
+
+    // Projector View
+    projectorTitle: 'Quiz Room — Великий Екран',
+    projectorEnterCode: 'Введи код кімнати',
+    projectorConnecting: 'Підключення...',
+    projectorWaiting: 'Очікуємо гравців',
+    projectorScanQr: 'Скануй QR або відкрий',
+    projectorPlayersJoined: 'гравців приєдналось',
+    projectorPaused: 'ПАУЗА',
+    projectorAnswered: 'відповіли',
   },
 
   en: {
@@ -233,6 +253,26 @@ export const TRANSLATIONS = {
     option: 'Option',
     categoryName: 'Category name',
     categoryNamePlaceholder: 'E.g.: Geography',
+
+    // Host Controls
+    hostControls: 'Game Controls',
+    hostPause: 'Pause',
+    hostResume: 'Resume',
+    hostSkip: 'Skip',
+    hostStart: 'Start',
+    gamePaused: 'Game Paused',
+    projectorLink: 'Projector View',
+    projectorHint: 'Open on big screen',
+
+    // Projector View
+    projectorTitle: 'Quiz Room — Big Screen',
+    projectorEnterCode: 'Enter room code',
+    projectorConnecting: 'Connecting...',
+    projectorWaiting: 'Waiting for players',
+    projectorScanQr: 'Scan QR or open',
+    projectorPlayersJoined: 'players joined',
+    projectorPaused: 'PAUSED',
+    projectorAnswered: 'answered',
   }
 };
 

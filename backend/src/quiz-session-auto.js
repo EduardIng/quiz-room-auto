@@ -65,6 +65,16 @@ class AutoQuizSession {
     // Час початку поточного питання (для розрахунку швидкості відповіді)
     this.questionStartTime = null;
 
+    // ── Host Controls підтримка ──
+    // isPaused: гра на паузі (зупинено таймер питання)
+    this.isPaused = false;
+    // Ліміт часу поточного питання (для розрахунку залишку при pause/resume)
+    this.currentTimerLimit = 0;
+    // Час що залишився при постановці на паузу
+    this.questionTimeRemaining = 0;
+    // Момент часу коли поставили на паузу
+    this.pausedAt = null;
+
     // Socket.IO об'єкт (встановлюється через init())
     this.io = null;
 
@@ -349,6 +359,11 @@ class AutoQuizSession {
     const question = this.getCurrentQuestion();
     const timeLimit = question.timeLimit || this.settings.questionTime;
 
+    // Запам'ятовуємо ліміт часу для підтримки pause/resume
+    this.currentTimerLimit = timeLimit;
+    this.questionTimeRemaining = timeLimit;
+    this.isPaused = false;
+
     log('Session', `Питання ${this.currentQuestionIndex + 1}/${totalQuestions}: "${question.question}"`);
 
     // Відправляємо питання всім гравцям
@@ -582,6 +597,155 @@ class AutoQuizSession {
     });
 
     setTimeout(() => this.nextQuestion(), 1000);
+  }
+
+  // ─────────────────────────────────────────────
+  // HOST CONTROLS — ручне керування ведучим
+  // ─────────────────────────────────────────────
+
+  /**
+   * Ставить питання на паузу — зупиняє таймер
+   *
+   * Може викликатись тільки в стані QUESTION і тільки якщо не на паузі.
+   * Зберігає час що залишився для resume.
+   * Broadcast: GAME_PAUSED до всіх клієнтів.
+   *
+   * @returns {{ success: boolean, error?: string }}
+   */
+  pauseGame() {
+    if (this.gameState !== 'QUESTION') {
+      return { success: false, error: 'Пауза можлива тільки під час питання' };
+    }
+    if (this.isPaused) {
+      return { success: false, error: 'Гра вже на паузі' };
+    }
+
+    // Зупиняємо таймер
+    clearTimeout(this.questionTimer);
+    this.questionTimer = null;
+    this.isPaused = true;
+    this.pausedAt = Date.now();
+
+    // Обчислюємо скільки часу залишилось
+    const elapsed = (this.pausedAt - this.questionStartTime) / 1000;
+    this.questionTimeRemaining = Math.max(0, this.currentTimerLimit - elapsed);
+
+    log('Session', `Гра на паузі. Залишилось: ${Math.ceil(this.questionTimeRemaining)}с`);
+
+    this.broadcast({
+      type: 'GAME_PAUSED',
+      timeRemaining: Math.ceil(this.questionTimeRemaining)
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Відновлює питання після паузи
+   *
+   * Коригує questionStartTime щоб час відповіді гравців не включав тривалість паузи.
+   * Перезапускає таймер на залишений час.
+   * Broadcast: GAME_RESUMED до всіх клієнтів.
+   *
+   * @returns {{ success: boolean, error?: string }}
+   */
+  resumeGame() {
+    if (!this.isPaused) {
+      return { success: false, error: 'Гра не на паузі' };
+    }
+
+    this.isPaused = false;
+
+    // Коригуємо questionStartTime:
+    // elapsed_before_pause = currentTimerLimit - questionTimeRemaining
+    // новий questionStartTime = now - elapsed_before_pause * 1000
+    // → timeSpent для гравця що відповість зараз = elapsed_before_pause (правильно)
+    const elapsedBeforePause = this.currentTimerLimit - this.questionTimeRemaining;
+    this.questionStartTime = Date.now() - elapsedBeforePause * 1000;
+    this.pausedAt = null;
+
+    log('Session', `Гра відновлена. Залишилось: ${Math.ceil(this.questionTimeRemaining)}с`);
+
+    // Перезапускаємо таймер на залишений час
+    this.startQuestionTimer(this.questionTimeRemaining);
+
+    this.broadcast({
+      type: 'GAME_RESUMED',
+      timeRemaining: Math.ceil(this.questionTimeRemaining)
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Пропускає поточне питання або перехід між фазами
+   *
+   * Якщо в QUESTION → завершує питання достроково (показує відповідь).
+   * Якщо в ANSWER_REVEAL → пропускає до leaderboard.
+   * Якщо в LEADERBOARD → пропускає до наступного питання/кінця.
+   * Якщо в CATEGORY_SELECT → авто-вибирає категорію.
+   *
+   * @returns {{ success: boolean, error?: string }}
+   */
+  skipQuestion() {
+    if (this.gameState === 'QUESTION') {
+      if (this.isPaused) this.isPaused = false;
+      log('Session', 'Ведучий пропустив питання (endQuestion)');
+      this.endQuestion();
+      return { success: true };
+    }
+
+    if (this.gameState === 'ANSWER_REVEAL') {
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
+      log('Session', 'Ведучий пропустив reveal → leaderboard');
+      this.showLeaderboard();
+      return { success: true };
+    }
+
+    if (this.gameState === 'LEADERBOARD') {
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = null;
+      const totalQuestions = this.isCategoryMode ? this.rounds.length : this.quizData.questions.length;
+      const isLast = this.currentQuestionIndex >= totalQuestions - 1;
+      log('Session', 'Ведучий пропустив leaderboard');
+      if (isLast) {
+        this.endQuiz();
+      } else if (this.isCategoryMode) {
+        this.startCategorySelect();
+      } else {
+        this.nextQuestion();
+      }
+      return { success: true };
+    }
+
+    if (this.gameState === 'CATEGORY_SELECT') {
+      clearTimeout(this.categorySelectTimer);
+      this.categorySelectTimer = null;
+      const roundIndex = this.currentQuestionIndex + 1;
+      const randomChoice = Math.floor(Math.random() * 2);
+      log('Session', 'Ведучий пропустив вибір категорії — авто-вибір');
+      this._resolveCategory(roundIndex, randomChoice, true);
+      return { success: true };
+    }
+
+    return { success: false, error: `Неможливо пропустити в стані ${this.gameState}` };
+  }
+
+  /**
+   * Примусово стартує квіз незалежно від кількості гравців
+   *
+   * Корисно коли autoStart вимкнений або minPlayers ще не досягнуто.
+   *
+   * @returns {{ success: boolean, error?: string }}
+   */
+  forceStart() {
+    if (this.gameState !== 'WAITING') {
+      return { success: false, error: `Гра вже почалась (стан: ${this.gameState})` };
+    }
+    log('Session', 'Примусовий старт від ведучого');
+    this.startQuiz();
+    return { success: true };
   }
 
   /**
@@ -884,19 +1048,66 @@ class AutoQuizSession {
   }
 
   /**
-   * Повертає поточний стан гри (для нових гравців що приєднуються)
+   * Повертає поточний стан гри (для нових гравців що приєднуються та для Projector View)
+   *
+   * Розширений стан включає:
+   * - Поточне питання (без правильної відповіді) якщо gameState=QUESTION
+   * - Правильну відповідь якщо gameState=ANSWER_REVEAL
+   * - Leaderboard якщо gameState=LEADERBOARD або ENDED
+   * - isPaused та часові показники для Projector timer sync
    *
    * @returns {Object} Стан гри для синхронізації клієнта
    */
   getState() {
     const totalQuestions = this.isCategoryMode ? this.rounds.length : this.quizData.questions.length;
-    return {
+
+    const state = {
       gameState: this.gameState,
+      isPaused: this.isPaused,
       players: this._getPlayerList(),
       totalQuestions,
       currentQuestionIndex: this.currentQuestionIndex,
-      quizTitle: this.quizData.title
+      quizTitle: this.quizData.title,
+      isCategoryMode: this.isCategoryMode,
+      playerCount: this.players.size,
     };
+
+    // Дані поточного питання (без правильної відповіді) — для Projector sync
+    if ((this.gameState === 'QUESTION' || this.gameState === 'ANSWER_REVEAL') &&
+        this.currentQuestionIndex >= 0) {
+      const q = this.getCurrentQuestion();
+      state.currentQuestion = {
+        text: q.question,
+        answers: q.answers.map((text, id) => ({ id, text })),
+        ...(q.image ? { image: q.image } : {}),
+        ...(q.audio ? { audio: q.audio } : {}),
+      };
+      state.questionIndex = this.currentQuestionIndex + 1;
+      state.answeredCount = this.currentAnswers.size;
+    }
+
+    // Залишок часу для Projector timer (тільки в QUESTION)
+    if (this.gameState === 'QUESTION') {
+      if (this.isPaused) {
+        state.timeRemaining = Math.ceil(this.questionTimeRemaining);
+      } else {
+        const elapsed = (Date.now() - this.questionStartTime) / 1000;
+        state.timeRemaining = Math.max(0, Math.ceil(this.currentTimerLimit - elapsed));
+      }
+      state.timeLimit = this.currentTimerLimit;
+    }
+
+    // Правильна відповідь для Projector (тільки в ANSWER_REVEAL)
+    if (this.gameState === 'ANSWER_REVEAL' && this.currentQuestionIndex >= 0) {
+      state.correctAnswer = this.getCurrentQuestion().correctAnswer;
+    }
+
+    // Leaderboard для Projector
+    if (this.gameState === 'LEADERBOARD' || this.gameState === 'ENDED') {
+      state.leaderboard = this.calculateLeaderboard();
+    }
+
+    return state;
   }
 
   /**

@@ -168,6 +168,47 @@ class QuizDatabase {
   }
 
   /**
+   * Видаляє старі сесії з бази даних (разом з results та question_stats).
+   *
+   * Запускається автоматично при старті сервера і раз на 24 години.
+   * За замовчуванням видаляє сесії старіші 90 днів.
+   *
+   * @param {number} daysOld - Вік сесій у днях (за замовчуванням 90)
+   * @returns {number} Кількість видалених сесій
+   */
+  cleanupOldSessions(daysOld = 90) {
+    try {
+      const cutoff = Date.now() - daysOld * 24 * 60 * 60 * 1000;
+
+      // Знаходимо ID старих сесій для каскадного видалення
+      const oldSessions = this.db.prepare('SELECT id FROM sessions WHERE ended_at < ?').all(cutoff);
+
+      if (oldSessions.length === 0) return 0;
+
+      const deleteStats   = this.db.prepare('DELETE FROM question_stats WHERE session_id = ?');
+      const deleteResults = this.db.prepare('DELETE FROM results WHERE session_id = ?');
+      const deleteSess    = this.db.prepare('DELETE FROM sessions WHERE id = ?');
+
+      // Видаляємо в транзакції для цілісності
+      const cleanup = this.db.transaction(() => {
+        for (const s of oldSessions) {
+          deleteStats.run(s.id);
+          deleteResults.run(s.id);
+          deleteSess.run(s.id);
+        }
+        return oldSessions.length;
+      });
+
+      const removed = cleanup();
+      log('DB', `Автоочищення: видалено ${removed} сесій старіших ${daysOld} днів`);
+      return removed;
+    } catch (err) {
+      log('DB', `Помилка автоочищення: ${err.message}`);
+      return 0;
+    }
+  }
+
+  /**
    * Returns aggregate statistics across all sessions.
    *
    * @returns {Object}

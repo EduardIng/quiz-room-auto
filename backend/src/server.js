@@ -206,6 +206,11 @@ class QuizServer {
   setupWebSocket() {
     this.roomManager.init();
     log('Server', 'WebSocket обробники ініціалізовано');
+
+    // Запускаємо очищення старих сесій з БД одразу при старті
+    // і потім кожні 24 години (видаляємо сесії старіші 90 днів)
+    db.cleanupOldSessions(90);
+    setInterval(() => db.cleanupOldSessions(90), 24 * 60 * 60 * 1000);
   }
 
   /**

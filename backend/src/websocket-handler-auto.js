@@ -35,6 +35,18 @@ class QuizRoomManager {
     // Map приналежності сокетів: socketId → roomCode
     // Потрібно щоб при відключенні знати з якої кімнати видалити гравця
     this.socketToRoom = new Map();
+
+    // Map хостів кімнат: roomCode → socketId ведучого
+    // Тільки хост може надсилати host-control події
+    this.roomHosts = new Map();
+
+    // Map спостерігачів (Projector View): socketId → roomCode
+    // Спостерігачі підписані на broadcast але не є гравцями
+    this.observers = new Map();
+
+    // Rate limiting для submit-answer: socketId → { count, resetAt }
+    // Максимум 10 подій за 30 секунд (захист від flood-атак)
+    this.answerRateLimit = new Map();
   }
 
   /**
@@ -57,6 +69,9 @@ class QuizRoomManager {
       socket.on('submit-answer', (data, callback) => this.handleSubmitAnswer(socket, data, callback));
       socket.on('submit-category', (data, callback) => this.handleSubmitCategory(socket, data, callback));
       socket.on('get-game-state', (data, callback) => this.handleGetGameState(socket, data, callback));
+      // Нові обробники: підписка спостерігача (Projector View) та керування від ведучого
+      socket.on('watch-room', (data, callback) => this.handleWatchRoom(socket, data, callback));
+      socket.on('host-control', (data, callback) => this.handleHostControl(socket, data, callback));
       socket.on('disconnect', () => this.handleDisconnect(socket));
     });
 
@@ -170,6 +185,9 @@ class QuizRoomManager {
       // Підключаємо хоста до Socket.IO кімнати
       socket.join(roomCode);
       this.socketToRoom.set(socket.id, roomCode);
+
+      // Запам'ятовуємо хоста кімнати (тільки він може надсилати host-control)
+      this.roomHosts.set(roomCode, socket.id);
 
       log('WS', `Квіз створено. Кімната: ${roomCode}, Питань: ${data.quizData.questions.length}`);
 
@@ -292,6 +310,16 @@ class QuizRoomManager {
         return respond({ success: false, error: 'Сесія не знайдена' });
       }
 
+      // Rate limiting: максимум 10 submit-answer подій за 30 секунд на сокет
+      const now = Date.now();
+      const rl = this.answerRateLimit.get(socket.id) || { count: 0, resetAt: now + 30000 };
+      if (now > rl.resetAt) { rl.count = 0; rl.resetAt = now + 30000; }
+      rl.count++;
+      this.answerRateLimit.set(socket.id, rl);
+      if (rl.count > 10) {
+        return respond({ success: false, error: 'Забагато запитів. Зачекайте.' });
+      }
+
       // Валідація answerId
       if (data === undefined || data === null || data.answerId === undefined) {
         return respond({ success: false, error: 'Вкажіть відповідь' });
@@ -397,6 +425,115 @@ class QuizRoomManager {
   }
 
   /**
+   * Обробляє підписку спостерігача (Projector View / Big Screen)
+   *
+   * Подія: 'watch-room'
+   * Відправник: Projector View (великий екран у залі)
+   *
+   * Що робить:
+   * 1. Валідує roomCode
+   * 2. Додає сокет до Socket.IO кімнати (щоб отримувати quiz-update broadcast)
+   * 3. Повертає повний поточний стан для ініціальної синхронізації
+   *
+   * Спостерігач НЕ є гравцем — не додається до session.players,
+   * не впливає на autoStart, не отримує removePlayer при disconnect.
+   *
+   * @param {Object} socket - Socket.IO сокет Projector
+   * @param {Object} data - { roomCode }
+   * @param {Function} callback - Функція відповіді
+   */
+  handleWatchRoom(socket, data, callback) {
+    const respond = typeof callback === 'function' ? callback : () => {};
+
+    try {
+      const roomCode = String(data?.roomCode || '').toUpperCase().trim();
+
+      if (!roomCode || roomCode.length !== 6) {
+        return respond({ success: false, error: 'Вкажіть коректний код кімнати (6 символів)' });
+      }
+
+      const session = this.sessions.get(roomCode);
+
+      if (!session) {
+        return respond({ success: false, error: `Кімната "${roomCode}" не знайдена` });
+      }
+
+      // Підключаємо спостерігача до Socket.IO кімнати
+      socket.join(roomCode);
+      this.observers.set(socket.id, roomCode);
+
+      log('WS', `Projector підключився до кімнати ${roomCode} (${socket.id})`);
+
+      // Повертаємо повний поточний стан для синхронізації
+      respond({ success: true, gameState: session.getState() });
+
+    } catch (err) {
+      log('WS', `Помилка watch-room: ${err.message}`);
+      respond({ success: false, error: 'Внутрішня помилка сервера' });
+    }
+  }
+
+  /**
+   * Обробляє команди керування грою від ведучого (Host Controls)
+   *
+   * Подія: 'host-control'
+   * Відправник: Host (той хто створив кімнату)
+   *
+   * Доступні дії (data.action):
+   * - 'pause'  → зупинити таймер питання
+   * - 'resume' → відновити після паузи
+   * - 'skip'   → пропустити поточний крок (питання/reveal/leaderboard)
+   * - 'start'  → примусово стартувати квіз (незалежно від minPlayers)
+   *
+   * Безпека: тільки хост кімнати (той хто надіслав create-quiz) може
+   * керувати грою. Перевіряємо через this.roomHosts Map.
+   *
+   * @param {Object} socket - Socket.IO сокет хоста
+   * @param {Object} data - { action: 'pause'|'resume'|'skip'|'start' }
+   * @param {Function} callback - Функція відповіді
+   */
+  handleHostControl(socket, data, callback) {
+    const respond = typeof callback === 'function' ? callback : () => {};
+
+    try {
+      const roomCode = this.socketToRoom.get(socket.id);
+
+      if (!roomCode) {
+        return respond({ success: false, error: 'Ви не знаходитесь в жодній кімнаті' });
+      }
+
+      // Перевіряємо що це хост кімнати
+      if (this.roomHosts.get(roomCode) !== socket.id) {
+        return respond({ success: false, error: 'Тільки ведучий може керувати грою' });
+      }
+
+      const session = this.sessions.get(roomCode);
+      if (!session) {
+        return respond({ success: false, error: 'Сесія не знайдена' });
+      }
+
+      const action = data?.action;
+      let result;
+
+      switch (action) {
+        case 'pause':  result = session.pauseGame();    break;
+        case 'resume': result = session.resumeGame();   break;
+        case 'skip':   result = session.skipQuestion(); break;
+        case 'start':  result = session.forceStart();   break;
+        default:
+          return respond({ success: false, error: `Невідома дія: "${action}"` });
+      }
+
+      log('WS', `host-control "${action}" в кімнаті ${roomCode}: ${result.success ? 'OK' : result.error}`);
+      respond(result);
+
+    } catch (err) {
+      log('WS', `Помилка host-control: ${err.message}`);
+      respond({ success: false, error: 'Внутрішня помилка сервера' });
+    }
+  }
+
+  /**
    * Обробляє відключення клієнта
    *
    * Подія: 'disconnect' (автоматично від Socket.IO)
@@ -413,6 +550,17 @@ class QuizRoomManager {
   handleDisconnect(socket) {
     log('WS', `Відключення: ${socket.id}`);
 
+    // Очищаємо rate limiting для цього сокету
+    this.answerRateLimit.delete(socket.id);
+
+    // Якщо це спостерігач (Projector) — просто видаляємо з мапи, гра не зачіпається
+    if (this.observers.has(socket.id)) {
+      const observedRoom = this.observers.get(socket.id);
+      this.observers.delete(socket.id);
+      log('WS', `Projector відключився від кімнати ${observedRoom}`);
+      return;
+    }
+
     // Знаходимо кімнату цього сокету
     const roomCode = this.socketToRoom.get(socket.id);
 
@@ -426,8 +574,16 @@ class QuizRoomManager {
         // Якщо квіз завершено і гравців не залишилось → видаляємо сесію
         if (session.gameState === 'ENDED' && session.players.size === 0) {
           this.sessions.delete(roomCode);
+          this.roomHosts.delete(roomCode);
           log('WS', `Сесія ${roomCode} видалена (завершена, гравців немає)`);
         }
+      }
+
+      // Якщо хост відключився — видаляємо запис хоста
+      // (нового хоста не призначаємо, але гра триває)
+      if (this.roomHosts.get(roomCode) === socket.id) {
+        this.roomHosts.delete(roomCode);
+        log('WS', `Хост кімнати ${roomCode} відключився`);
       }
 
       // Видаляємо відображення сокет → кімната
