@@ -2,7 +2,7 @@
 
 > Цей файл є основою для перезапуску роботи з Claude Code.
 > Прочитай його повністю перед тим як продовжувати розробку.
-> Останнє оновлення: 6 березня 2026 (сесія 2)
+> Останнє оновлення: 6 березня 2026 (сесія 3)
 
 ---
 
@@ -15,10 +15,10 @@
 - **Розробник:** EduardIng
 - **Репозиторій:** https://github.com/EduardIng/quiz-room-auto
 - **Локальна папка:** `/Users/einhorn/quiz-room-auto`
-- **Версія:** v1.3.0 (закомічено, не тегована)
-- **Тести:** 66/66 проходять ✅
+- **Версія:** v1.3.0 (тег і push ✅)
+- **Тести:** 100/100 проходять ✅
 - **Збірка фронтенду:** успішна ✅
-- **Останній коміт:** `bf72b5d` — все закомічено і запушено на GitHub
+- **Останній коміт:** `3e5d470` — все закомічено і запушено на GitHub
 
 ---
 
@@ -35,18 +35,20 @@ quiz-room-auto/
 │   │   ├── db.js                      ← SQLite база даних (better-sqlite3)
 │   │   └── utils.js                   ← Логування, валідація
 │   └── tests/
-│       ├── session.test.js            ← 44 тести стану сесії
-│       └── websocket.test.js          ← 22 тести WS обробника
+│       ├── session.test.js            ← 70 тестів стану сесії (+ host controls, category)
+│       └── websocket.test.js          ← 30 тестів WS обробника (+ watch-room, host-control, storage)
 ├── frontend/
 │   ├── src/
 │   │   ├── main.jsx                   ← Роутинг (#/, #/admin, #/create, #/stats)
 │   │   ├── components/
 │   │   │   ├── PlayerView.jsx         ← Інтерфейс гравця (9 екранів)
 │   │   │   ├── PlayerView.css
-│   │   │   ├── AdminPanel.jsx         ← Адмін панель (моніторинг кімнат)
+│   │   │   ├── AdminPanel.jsx         ← Адмін панель (моніторинг кімнат + projector link)
 │   │   │   ├── AdminPanel.css
-│   │   │   ├── QuizCreator.jsx        ← Редактор квізів (стандарт + категорії)
+│   │   │   ├── QuizCreator.jsx        ← Редактор квізів + host controls + projector link
 │   │   │   ├── QuizCreator.css
+│   │   │   ├── ProjectorView.jsx      ← Великий екран для залу (#/screen)
+│   │   │   ├── ProjectorView.css
 │   │   │   ├── StatsPanel.jsx         ← Статистика сесій
 │   │   │   └── StatsPanel.css
 │   │   ├── styles/
@@ -128,9 +130,9 @@ quiz-room-auto/
 - **`theme.css`** — CSS змінні: кольори, радіуси, тіні, анімації
 
 ### Phase 3 — Тести
-- **`session.test.js`** — 44 тести: стани, гравці, бали, leaderboard
-- **`websocket.test.js`** — 22 тести: кімнати, join, відповіді, disconnect
-- Всього: **66/66 тестів ✅**
+- **`session.test.js`** — 70 тестів: стани, гравці, бали, leaderboard, host controls, category mode
+- **`websocket.test.js`** — 30 тестів: кімнати, join, відповіді, disconnect, watch-room, host-control, saveQuiz/deleteQuiz
+- Всього: **100/100 тестів ✅**
 - Jest налаштований у `package.json`
 
 ### Phase 4 — Документація
@@ -302,13 +304,61 @@ quiz-room-auto/
 
 ---
 
-## ⚠️ Що НЕ зроблено (залишається після Phase 9)
+### Phase 10 — Projector View + Host Controls + Rate Limiting + DB Cleanup (сесія 3) ✅ ЗАКОМІЧЕНО
 
-1. **Не оновлено документацію** — README, API.md, USAGE.md, SETUP.md не містять інформації про category mode та quiz library
+**Projector/Big Screen View (`#/screen`):**
+- `ProjectorView.jsx` — повний компонент для телевізора/проектора:
+  - Підключення як спостерігач через `watch-room` (не гравець)
+  - Автосинхронізація початкового стану через `getState()`
+  - Екрани: enter_code, connecting, WAITING (QR + список гравців), STARTING (відлік), CATEGORY_SELECT (таймер-бар + 2 варіанти), CATEGORY_CHOSEN, QUESTION (таймер + відповіді + лічильник), ANSWER_REVEAL (зелена правильна відповідь), LEADERBOARD/ENDED
+  - Пауза-оверлей поверх усього
+  - QR-код через `/api/qr/:roomCode`
+- `ProjectorView.css` — стилі під 1920×1080, великі шрифти, контрасні кольори
+- `main.jsx` — новий маршрут `#/screen` → `<ProjectorView />`
+
+**Host Controls (у QuizCreator після створення кімнати):**
+- Кнопки: ▶ Start / ⏸ Pause ↔ ▶ Resume / ⏭ Skip
+- Socket listener для GAME_PAUSED / GAME_RESUMED оновлює стан кнопок
+- Бейдж "Гра на паузі" при активній паузі
+- Посилання 📺 Projector View → відкриває `#/screen?room=CODE` в новій вкладці
+
+**AdminPanel:**
+- Кожна карточка активної кімнати має посилання 📺 Projector View
+
+**Backend (quiz-session-auto.js):**
+- `pauseGame()` — зупиняє таймер, зберігає `questionTimeRemaining`, broadcast GAME_PAUSED
+- `resumeGame()` — відновлює таймер з `questionTimeRemaining`, коригує `questionStartTime`, broadcast GAME_RESUMED
+- `skipQuestion()` — QUESTION→endQuestion, ANSWER_REVEAL→showLeaderboard, LEADERBOARD→next/end, CATEGORY_SELECT→авто-вирішення
+- `forceStart()` — запускає гру зі стану WAITING
+- `getState()` розширений: `isPaused`, `timeRemaining`, `timeLimit`, `currentQuestion` (без правильної відповіді), `correctAnswer` (тільки в ANSWER_REVEAL), `leaderboard` (в LEADERBOARD/ENDED)
+
+**Backend (websocket-handler-auto.js):**
+- `watch-room` → `handleWatchRoom()`: socket.join(roomCode), записує в `observers` Map, повертає `getState()`
+- `host-control` → `handleHostControl()`: перевіряє `roomHosts.get(roomCode) === socket.id`, виконує pause/resume/skip/start
+- Rate limiting: `answerRateLimit` Map, max 10 `submit-answer` на 30с per socket
+- `handleDisconnect`: очищає `observers`, `answerRateLimit`, `roomHosts`
+
+**Backend (db.js):**
+- `cleanupOldSessions(daysOld=90)` — каскадне видалення question_stats → results → sessions в транзакції
+
+**Backend (server.js):**
+- Auto DB cleanup при старті та кожні 24 години
+
+**Quiz-mega-pack-v2.json:**
+- Переупорядковані 30 раундів через 1-факторизацію K₆
+- 0 послідовних повторень категорій, 15 унікальних пар, кожна пара рівно 2 рази
+
+**Тести:**
+- `session.test.js`: +26 нових тестів (pauseGame, resumeGame, forceStart, skipQuestion × 4, startCategorySelect, submitCategory × 4)
+- `websocket.test.js`: +8 нових тестів (handleWatchRoom × 4, handleHostControl × 7, saveQuiz/deleteQuiz × 6)
+- **Разом: 100/100 ✅**
+
+---
+
+## ⚠️ Що НЕ зроблено
+
+1. **Не оновлено документацію** — README, API.md, USAGE.md, SETUP.md не містять інформації про category mode, quiz library, projector view, host controls
 2. **PROGRESS_LOG.md не оновлений** — старий лог-файл зупинився на Phase 7
-3. **Не додано тести** — для `startCategorySelect`, `submitCategory`, `_resolveCategory`, `saveQuiz`, `deleteQuiz`
-4. **Не тегована нова версія** — остання теґ v1.2.0, поточний код відповідає v1.3.0
-5. **Немає Projector/Big Screen View** — `#/screen` сторінки для телевізора немає (обговорювалось але не реалізовано)
 
 ---
 
@@ -322,6 +372,8 @@ quiz-room-auto/
 | `submit-answer` | `{ answerId: 0-3 }` | `{ success }` |
 | `submit-category` | `{ choiceIndex: 0-1 }` | `{ success }` |
 | `get-game-state` | `{ roomCode }` | `{ success, gameState }` |
+| `watch-room` | `{ roomCode }` | `{ success, gameState }` (спостерігач/Projector) |
+| `host-control` | `{ roomCode, action: 'pause'\|'resume'\|'skip'\|'start' }` | `{ success }` (тільки хост) |
 
 ### Сервер → Клієнт (подія `quiz-update`)
 | type | Коли | Ключові поля |
@@ -333,6 +385,8 @@ quiz-room-auto/
 | `CATEGORY_CHOSEN` | Категорія обрана | `category`, `choiceIndex`, `wasTimeout` |
 | `NEW_QUESTION` | Нове питання | `questionIndex`, `totalQuestions`, `question {text, answers, image?, audio?}`, `timeLimit` |
 | `ANSWER_COUNT` | Хтось відповів | `answered`, `total` |
+| `GAME_PAUSED` | Хост поставив на паузу | `timeRemaining` |
+| `GAME_RESUMED` | Хост відновив гру | `timeRemaining` |
 | `REVEAL_ANSWER` | Час вийшов / всі відповіли | `correctAnswer`, `statistics`, `playerResults` |
 | `SHOW_LEADERBOARD` | Після reveal | `leaderboard`, `isLastQuestion` |
 | `QUIZ_ENDED` | Після останнього leaderboard | `finalLeaderboard`, `totalQuestions` |
