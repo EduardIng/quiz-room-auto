@@ -127,7 +127,7 @@ Or scan the QR code shown after creating a room — it encodes the join URL auto
 | Frontend | React 18, Vite 4 |
 | Real-time | WebSocket (Socket.IO) |
 | QR codes | qrcode (server-side PNG generation) |
-| Testing | Jest 29 (100 tests) |
+| Testing | Jest 29 (165 tests) |
 
 ---
 
@@ -144,12 +144,15 @@ quiz-room-auto/
 │   │   ├── db.js                      # SQLite persistence (sessions, results)
 │   │   └── utils.js                   # Config loader, logging
 │   └── tests/
-│       ├── session.test.js            # 70 unit tests
-│       └── websocket.test.js          # 30 unit tests
+│       ├── session.test.js            # 70 unit tests (state machine)
+│       ├── websocket.test.js          # 30 unit tests (WebSocket handlers)
+│       ├── quiz-storage.test.js       # 28 unit tests (file storage)
+│       ├── db.test.js                 # 22 unit tests (SQLite persistence)
+│       └── server.test.js             # 15 integration tests (HTTP endpoints)
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── PlayerView.jsx         # 7-screen player UI
+│   │   │   ├── PlayerView.jsx         # 10-screen player UI (incl. category mode)
 │   │   │   ├── AdminPanel.jsx         # Live session monitor
 │   │   │   ├── QuizCreator.jsx        # Quiz builder + import + host controls
 │   │   │   ├── ProjectorView.jsx      # Read-only big-screen display
@@ -201,7 +204,7 @@ Edit `config.json` to change game behaviour:
 npm test
 ```
 
-Output: `100 passed, 0 failed`
+Output: `165 passed, 0 failed`
 
 ---
 

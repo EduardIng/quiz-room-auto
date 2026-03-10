@@ -574,7 +574,7 @@ Saves a quiz to the `quizzes/` directory. Used by the QuizCreator "Save to libra
 }
 ```
 
-The `id` is derived from the title (lowercased, spaces replaced with hyphens). If a file with the same name already exists it is overwritten.
+The `id` is derived from the title (lowercased, spaces replaced with hyphens). If a file with the same name already exists, a numeric suffix is appended (`-2`, `-3`, etc.) until a free name is found — existing files are never overwritten.
 
 **Validation errors:**
 - Missing or empty `title`

@@ -10,11 +10,63 @@ Phase 4: Documentation       [██████████] 100% ✅
 Phase 5: Optional Features   [██████████] 100% ✅
 Phase 6: Extended Features   [██████████] 100% ✅
 Phase 7: Rich Media          [██████████] 100% ✅
+Phase 8: Category Mode       [██████████] 100% ✅
+Phase 9: Quiz Library        [██████████] 100% ✅
+Phase 10: Projector + Host   [██████████] 100% ✅
+
+Overall: v1.3.0 — 165/165 tests passing ✅
 ```
 
 ---
 
 ## Session Log
+
+### Session 4 — 2026-03-10
+**Status:** Complete (Documentation overhaul + 65 new backend tests)
+
+---
+
+### Сесія 4 — Документація та тести ✅
+
+**Нові пакети:**
+- `supertest` (devDependency) — HTTP endpoint testing without live server
+
+**Нові файли:**
+
+| Файл | Рядків | Тестів | Опис |
+|------|--------|--------|------|
+| `backend/tests/quiz-storage.test.js` | 244 | 28 | loadAllQuizzes, saveQuiz, deleteQuiz, loadQuizById, path traversal |
+| `backend/tests/db.test.js` | 236 | 22 | saveSession, getSessions, getSessionResults, getStats, cleanupOldSessions |
+| `backend/tests/server.test.js` | 273 | 15 | GET /health, /api/active-quizzes, /api/quizzes, POST /api/quizzes/save, DELETE, /api/stats, /api/qr |
+
+**Змінені вихідні файли (1 рядок кожен):**
+
+| Файл | Зміна |
+|------|-------|
+| `backend/src/db.js` | `DB_PATH` читає `process.env.TEST_DB_PATH` для тест-ізоляції |
+| `backend/src/quiz-storage.js` | `QUIZZES_DIR` читає `process.env.TEST_QUIZZES_DIR` для тест-ізоляції |
+
+**Оновлена документація:**
+
+| Файл | Що змінено |
+|------|-----------|
+| `CLAUDE.md` | Оптимізовано 46 683→22 183 символів; додано SESSION START блок; оновлено правило PROGRESS_LOG/PROGRESS |
+| `PROGRESS.md` | Версії (v1.3.0), KI таблиця (KI-007/008), "Що НЕ зроблено", футер |
+| `LEARNING_NOTES.md` | Назви станів машини станів (LOBBY→WAITING тощо) |
+| `API.md` | POST /api/quizzes/save — суфікс замість перезапису |
+| `README.md` | Кількість екранів PlayerView (7→10), тест-структура, лічильники |
+| `SETUP.md` | Category Mode, Projector View, Host Controls; frontend dev команда (5173); config shuffle |
+| `GLOSSARY.md` | 8 нових термінів (Category Mode, Chooser, Host Controls, playerJoinOrder, Rate Limiting, roomHosts, watch-room, Projector View) |
+
+**Результати тестів:** 165/165 ✅ (було 100, +65 нових)
+
+**Збірка фронтенду:** не змінювалась (тільки backend + docs)
+
+**Git tag:** немає (тільки документація та тести, не нова фіча)
+
+**Commit:** документація + тести — pushed to `origin/main`
+
+---
 
 ### Session 3 — 2026-03-05
 **Status:** Complete (Phase 7 — Rich Media)

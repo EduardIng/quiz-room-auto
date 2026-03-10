@@ -16,7 +16,7 @@
 - **Репозиторій:** https://github.com/EduardIng/quiz-room-auto
 - **Локальна папка:** `/Users/einhorn/quiz-room-auto`
 - **Версія:** v1.3.0 (тег і push ✅)
-- **Тести:** 100/100 проходять ✅
+- **Тести:** 165/165 проходять ✅
 - **Збірка фронтенду:** успішна ✅
 - **Останній коміт:** `3e5d470` — все закомічено і запушено на GitHub
 
@@ -36,7 +36,10 @@ quiz-room-auto/
 │   │   └── utils.js                   ← Логування, валідація
 │   └── tests/
 │       ├── session.test.js            ← 70 тестів стану сесії (+ host controls, category)
-│       └── websocket.test.js          ← 30 тестів WS обробника (+ watch-room, host-control, storage)
+│       ├── websocket.test.js          ← 30 тестів WS обробника (+ watch-room, host-control, storage)
+│       ├── quiz-storage.test.js       ← 28 тестів quiz-storage.js (сесія 4)
+│       ├── db.test.js                 ← 22 тести db.js (сесія 4)
+│       └── server.test.js             ← 15 тестів HTTP ендпоінтів (сесія 4)
 ├── frontend/
 │   ├── src/
 │   │   ├── main.jsx                   ← Роутинг (#/, #/admin, #/create, #/stats)
@@ -132,7 +135,10 @@ quiz-room-auto/
 ### Phase 3 — Тести
 - **`session.test.js`** — 70 тестів: стани, гравці, бали, leaderboard, host controls, category mode
 - **`websocket.test.js`** — 30 тестів: кімнати, join, відповіді, disconnect, watch-room, host-control, saveQuiz/deleteQuiz
-- Всього: **100/100 тестів ✅**
+- **`quiz-storage.test.js`** — 28 тестів: loadAllQuizzes, saveQuiz, deleteQuiz, loadQuizById, захист від path traversal (додано в сесії 4)
+- **`db.test.js`** — 22 тести: saveSession, getSessions, getSessionResults, getStats, cleanupOldSessions, каскадне видалення (додано в сесії 4)
+- **`server.test.js`** — 15 тестів: всі HTTP ендпоінти через supertest (health, quizzes, stats, qr) (додано в сесії 4)
+- Всього: **165/165 тестів ✅**
 - Jest налаштований у `package.json`
 
 ### Phase 4 — Документація
@@ -351,14 +357,40 @@ quiz-room-auto/
 **Тести:**
 - `session.test.js`: +26 нових тестів (pauseGame, resumeGame, forceStart, skipQuestion × 4, startCategorySelect, submitCategory × 4)
 - `websocket.test.js`: +8 нових тестів (handleWatchRoom × 4, handleHostControl × 7, saveQuiz/deleteQuiz × 6)
-- **Разом: 100/100 ✅**
+- **Разом (Phase 10): 100/100 ✅**
+
+---
+
+## ✅ Сесія 4 — 10 березня 2026 (документація + тести)
+
+**Що зроблено:**
+- **CLAUDE.md** — оптимізований з 46 683 до 22 183 символів (−53%); додано блок "STARTING A NEW SESSION", оновлено правила PROGRESS_LOG.md/PROGRESS.md
+- **PROGRESS.md** — виправлено: версії таблиця (v1.3.0), KI таблиця (KI-007/KI-008), "Що обговорювалось", рекомендований наступний крок, футер
+- **LEARNING_NOTES.md** — виправлено назви станів машини станів (LOBBY→WAITING, FINISHED→ENDED тощо)
+- **API.md** — виправлено опис POST /api/quizzes/save (суфікс замість перезапису)
+- **README.md** — виправлено кількість екранів PlayerView (7→10)
+- **SETUP.md** — додано Category Mode, Projector View, Host Controls; виправлено frontend dev команду (localhost:5173); виправлено config.json приклад (shuffle)
+- **GLOSSARY.md** — додано 8 нових термінів (Category Mode, Chooser, Host Controls тощо)
+
+**Нові тест-файли (65 нових тестів):**
+- `backend/tests/quiz-storage.test.js` — 28 тестів для quiz-storage.js
+- `backend/tests/db.test.js` — 22 тести для db.js
+- `backend/tests/server.test.js` — 15 тестів для HTTP ендпоінтів (supertest)
+
+**Зміни вихідного коду для тест-ізоляції:**
+- `backend/src/db.js` — `DB_PATH` тепер читає `process.env.TEST_DB_PATH` (1 рядок)
+- `backend/src/quiz-storage.js` — `QUIZZES_DIR` тепер читає `process.env.TEST_QUIZZES_DIR` (1 рядок)
+
+**Нові залежності:**
+- `supertest` (devDependency) — HTTP endpoint testing
+
+**Результат:** 165/165 тестів ✅
 
 ---
 
 ## ⚠️ Що НЕ зроблено
 
-1. **Не оновлено документацію** — README, API.md, USAGE.md, SETUP.md не містять інформації про category mode, quiz library, projector view, host controls
-2. **PROGRESS_LOG.md не оновлений** — старий лог-файл зупинився на Phase 7
+1. **PROGRESS_LOG.md** — оновлений в сесії 4 (нижче), але фазові записи Phase 8-10 відсутні (не критично)
 
 ---
 
@@ -435,7 +467,7 @@ quiz-room-auto/
 | `v1.0.0` | Phase 0-5: базова система + shuffle + звуки + admin + creator |
 | `v1.1.0` | Phase 6: SQLite + QR + stats + i18n + import |
 | `v1.2.0` | Phase 7: image/audio питання + drag-to-reorder |
-| (не тегована) | Phase 8+9: Category Mode + Quiz Library + answer reveal bug fix — закомічено, не тегована |
+| `v1.3.0` | Phase 8-10: Category Mode + Quiz Library + answer reveal fix + Projector View + Host Controls + rate limiting + DB cleanup |
 
 ---
 
@@ -447,16 +479,18 @@ quiz-room-auto/
 | KI-002 | `better-sqlite3` потребує `node-gyp` для збірки |
 | KI-003 | Stats panel робить окремий запит на кожен розгорнутий рядок |
 | KI-004 | Мова зберігається окремо в кожному браузері |
-| KI-005 | Немає автоматичного видалення старих сесій з БД |
-| KI-006 | Немає захисту від flood атак на submit-answer |
+| KI-007 | Браузерна autoplay policy може заблокувати аудіо питання |
+| KI-008 | Зовнішні media URLs можуть бути заблоковані CORS |
+
+Повний список з workarounds — у `KNOWN_ISSUES.md`.
 
 ---
 
 ## 💡 Що обговорювалось але НЕ реалізовано
 
-1. **Projector / Big Screen View** (`#/screen`) — велике відображення для телевізора в залі. Пріоритет: HIGH. Показує поточне питання, countdown, live лічильник відповідей, leaderboard після питання. Повністю окремий компонент від PlayerView.
-2. **Host Controls** — ручне керування темпом гри (пауза, наступне питання)
-3. **Team Mode** — командна гра замість індивідуальної
+1. ~~**Projector / Big Screen View**~~ — **реалізовано в Phase 10** (`ProjectorView.jsx`, `#/screen`)
+2. ~~**Host Controls**~~ — **реалізовано в Phase 10** (pause/resume/skip/start у QuizCreator)
+3. **Team Mode** — командна гра замість індивідуальної (не реалізовано, низький пріоритет)
 
 ---
 
@@ -467,14 +501,13 @@ quiz-room-auto/
 > "Прочитай CLAUDE.md і PROGRESS.md і продовжуй розробку. Ось що я хочу зробити: [завдання]"
 
 ### Рекомендований наступний крок
-Все закомічено і запушено. Наступні пріоритети:
-1. Тегувати `v1.3.0`: `git tag -a v1.3.0 -m "Category Mode + Quiz Library" && git push --tags`
-2. Реалізувати **Projector/Big Screen View** (`#/screen`) — найбільший пріоритет нової функції
-3. Додати тести для Phase 8+9 методів
+Проект на v1.3.0, все закомічено, запушено, теговано. Всі заплановані фічі реалізовані.
 
-### Або — нова функція
-Найбільший пріоритет що ще не реалізований: **Projector/Big Screen View** (`#/screen`)
+Можливі напрямки:
+1. Оновити **SETUP.md** — додати інформацію про category mode, projector view, host controls
+2. Реалізувати **Team Mode** — командна гра (єдина нереалізована запланована фіча)
+3. Будь-яка нова фіча за запитом користувача
 
 ---
 
-*Цей файл оновлено 6 березня 2026 (сесія 2) після завершення Phase 9 (Quiz Library + bug fixes)*
+*Цей файл оновлено 7 березня 2026 (сесія 4) — виправлено застарілі записи після Phase 10 (Projector View + Host Controls)*

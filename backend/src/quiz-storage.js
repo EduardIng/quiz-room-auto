@@ -13,7 +13,7 @@ const path = require('path');
 const { log } = require('./utils');
 
 // Шлях до директорії з квізами (відносно кореня проєкту)
-const QUIZZES_DIR = path.join(__dirname, '..', '..', 'quizzes');
+const QUIZZES_DIR = process.env.TEST_QUIZZES_DIR || path.join(__dirname, '..', '..', 'quizzes');
 
 /**
  * Перевіряє чи квіз є валідним (стандартний або categoryMode)

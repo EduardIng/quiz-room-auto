@@ -53,7 +53,7 @@ Expected output: `✓ built in Xms`
 npm test
 ```
 
-Expected output: `66 passed, 0 failed`
+Expected output: `165 passed, 0 failed`
 
 ### Step 5: Start the server
 
@@ -100,7 +100,8 @@ All settings live in `config.json` at the project root.
   "autoStart": true,         // Auto-start when minPlayers join
   "waitForAllPlayers": true, // End question early if everyone answered
   "minPlayers": 1,           // Minimum to auto-start
-  "maxPlayers": 8            // Hard cap per room
+  "maxPlayers": 8,           // Hard cap per room
+  "shuffle": false           // Randomise question order before each game
 }
 ```
 
@@ -179,6 +180,73 @@ Open `http://localhost:8080#/create` to build a quiz in the browser.
 
 Click **⬆ Import JSON** in the Quiz Creator to load any `.json` file from your computer. The editor is populated with its content, which you can review or edit before launching.
 
+### Option D — Category Mode quiz (JSON format)
+
+Category mode quizzes use a different JSON structure with `rounds` instead of `questions`:
+
+```json
+{
+  "title": "Geo vs History",
+  "categoryMode": true,
+  "rounds": [
+    {
+      "options": [
+        {
+          "category": "Geography",
+          "question": "What is the capital of France?",
+          "answers": ["London", "Berlin", "Paris", "Rome"],
+          "correctAnswer": 2,
+          "timeLimit": 20,
+          "image": "https://example.com/paris.jpg"
+        },
+        {
+          "category": "History",
+          "question": "In what year did WW2 end?",
+          "answers": ["1943", "1944", "1945", "1946"],
+          "correctAnswer": 2
+        }
+      ]
+    }
+  ]
+}
+```
+
+Each round has exactly 2 options. Before each round a designated player (chooser) picks one — the corresponding question is then asked to everyone. The chooser rotates every round. If the chooser doesn't pick within the time limit, the server picks randomly.
+
+You can also build category mode quizzes visually in the Quiz Creator by enabling the **Category mode** toggle.
+
+---
+
+## Projector View
+
+The projector view (`#/screen`) is a read-only big-screen display for a TV or projector visible to all players in the venue. It connects as an observer — it does not count as a player and has no effect on game logic.
+
+**How to open:**
+
+After launching a quiz in the Quiz Creator, click the **📺 Projector View** link, or open manually:
+```
+http://localhost:8080#/screen?room=AB3C7D
+```
+
+Display it on a second screen via screen mirroring or a second browser window on a different device.
+
+**What it shows:** room code + QR code (waiting), question + timer bar (question), correct answer highlight (reveal), ranked leaderboard (between questions), pause overlay when host pauses, final podium (ended).
+
+---
+
+## Host Controls
+
+After launching a quiz, the Quiz Creator shows a **Host Controls** panel. These buttons send live commands to the running session:
+
+| Button | Available when | Effect |
+|--------|---------------|--------|
+| ▶ Start | WAITING | Force-starts the quiz (skips autostart wait) |
+| ⏸ Pause | QUESTION | Freezes the question timer |
+| ▶ Resume | QUESTION (paused) | Resumes the timer from where it stopped |
+| ⏭ Skip | QUESTION / ANSWER_REVEAL / LEADERBOARD | Advances to the next phase immediately |
+
+Only the host socket (the browser that created the room) can send host controls — other clients' commands are rejected.
+
 ---
 
 ## Persistent Storage
@@ -211,8 +279,8 @@ npm run dev
 
 # Terminal 2: frontend dev server (proxies to backend)
 cd frontend
-npm start
-# Opens http://localhost:3000
+npm run dev
+# Opens http://localhost:5173
 ```
 
 ---
